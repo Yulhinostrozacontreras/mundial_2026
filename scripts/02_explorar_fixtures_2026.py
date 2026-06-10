@@ -12,11 +12,13 @@ import polars as pl
 PROC_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 df = pl.read_parquet(PROC_DIR / "partidos.parquet")
 
-# Fixtures futuros del Mundial 2026 (fase de grupos)
+# Fase de grupos = los primeros 72 partidos del Mundial 2026 (jugados o no).
+# Filtrar solo por home_score nulo romperia los grupos conforme se disputan los
+# partidos (el dataset llena los marcadores), por eso se toman todos por fecha.
 wc = df.filter(
     (pl.col("tournament") == "FIFA World Cup")
-    & (pl.col("home_score").is_null())
-).select("date", "home_team", "away_team", "city", "country").sort("date")
+    & (pl.col("date") >= pl.date(2026, 1, 1))
+).select("date", "home_team", "away_team", "city", "country").sort("date").head(72)
 
 print(f"Fixtures Mundial 2026 (fase de grupos): {wc.height} partidos\n")
 

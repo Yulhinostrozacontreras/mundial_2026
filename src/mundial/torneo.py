@@ -33,13 +33,26 @@ def cargar_insumos() -> dict:
     team2grupo = {i: l for l, ms in grupos.items() for i in ms}
 
     fix_por_grupo = {l: [] for l in grupos}
+    fix_set = set()
     for h, a in fixtures.select("home_team", "away_team").rows():
         fix_por_grupo[team2grupo[idx[h]]].append((idx[h], idx[a]))
+        fix_set.add((h, a))
+
+    # resultados REALES de los partidos de grupo ya jugados (condicionan la simulacion)
+    jugados = {}
+    partidos = pl.read_parquet(PROC / "partidos.parquet")
+    wc_jug = partidos.filter(
+        (pl.col("tournament") == "FIFA World Cup")
+        & (pl.col("date") >= pl.date(2026, 1, 1))
+        & pl.col("home_score").is_not_null())
+    for r in wc_jug.select("home_team", "away_team", "home_score", "away_score").iter_rows(named=True):
+        if (r["home_team"], r["away_team"]) in fix_set:
+            jugados[(idx[r["home_team"]], idx[r["away_team"]])] = (int(r["home_score"]), int(r["away_score"]))
 
     return dict(equipos=equipos, idx=idx, att=att, deff=deff, base=dc["base"],
                 rho=dc["rho"], elo=elo, S=float(cal["s"][0]), theta=float(cal["theta"][0]),
                 grupos=grupos, team2grupo=team2grupo, fix_por_grupo=fix_por_grupo,
-                nt=len(equipos))
+                jugados=jugados, nt=len(equipos))
 
 
 def _sig(u):
@@ -75,6 +88,7 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
             deff[i] += d / 250.0
 
     grupos, fix_por_grupo = ins["grupos"], ins["fix_por_grupo"]
+    jugados = ins.get("jugados", {})
 
     def standings_dc():
         res = {}
@@ -83,8 +97,12 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
             pts = np.zeros((n_sims, 4)); gf = np.zeros((n_sims, 4)); ga = np.zeros((n_sims, 4))
             for ih, ia in fix_por_grupo[l]:
                 ph, pa = loc[ih], loc[ia]
-                hg = rng.poisson(np.exp(base + att[ih] - deff[ia]), n_sims)
-                ag = rng.poisson(np.exp(base + att[ia] - deff[ih]), n_sims)
+                if (ih, ia) in jugados:  # marcador real fijo
+                    sh, sa = jugados[(ih, ia)]
+                    hg = np.full(n_sims, sh); ag = np.full(n_sims, sa)
+                else:
+                    hg = rng.poisson(np.exp(base + att[ih] - deff[ia]), n_sims)
+                    ag = rng.poisson(np.exp(base + att[ia] - deff[ih]), n_sims)
                 pts[:, ph] += np.where(hg > ag, 3, np.where(hg == ag, 1, 0))
                 pts[:, pa] += np.where(ag > hg, 3, np.where(hg == ag, 1, 0))
                 gf[:, ph] += hg; ga[:, ph] += ag; gf[:, pa] += ag; ga[:, pa] += hg
@@ -99,11 +117,16 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
             pts = np.zeros((n_sims, 4))
             for ih, ia in fix_por_grupo[l]:
                 ph, pa = loc[ih], loc[ia]
-                z = (elo[ih] - elo[ia]) / S
-                pH, pnl = _sig(z - theta), _sig(z + theta)
-                r = rng.random(n_sims)
-                pts[:, ph] += np.where(r < pH, 3, np.where(r < pnl, 1, 0))
-                pts[:, pa] += np.where(r >= pnl, 3, np.where(r < pnl, 1, 0))
+                if (ih, ia) in jugados:  # resultado real fijo (W/D/L)
+                    sh, sa = jugados[(ih, ia)]
+                    pts[:, ph] += 3 if sh > sa else (1 if sh == sa else 0)
+                    pts[:, pa] += 3 if sa > sh else (1 if sh == sa else 0)
+                else:
+                    z = (elo[ih] - elo[ia]) / S
+                    pH, pnl = _sig(z - theta), _sig(z + theta)
+                    r = rng.random(n_sims)
+                    pts[:, ph] += np.where(r < pH, 3, np.where(r < pnl, 1, 0))
+                    pts[:, pa] += np.where(r >= pnl, 3, np.where(r < pnl, 1, 0))
             comp = pts * 1e6 + np.array([elo[m] for m in ms])[None, :] + rng.random((n_sims, 4)) * 1e-3
             res[l] = _ranking(comp, ms)
         return res

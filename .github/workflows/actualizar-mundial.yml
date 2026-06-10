@@ -1,0 +1,47 @@
+name: Actualizar Mundial 2026
+
+# Corre el pipeline a diario durante el Mundial: baja resultados nuevos,
+# reentrena las fuerzas (Elo + Dixon-Coles), re-simula condicionando a los
+# partidos ya jugados y commitea los datos. El push redespliega Streamlit Cloud.
+
+on:
+  schedule:
+    - cron: '0 11 * 6,7 *'   # todos los dias 11:00 UTC (~06:00 Peru), junio-julio
+  workflow_dispatch:          # boton para correrlo manualmente desde la pestania Actions
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sincronizar dependencias
+        run: uv sync
+
+      - name: Actualizar datos y reentrenar modelos
+        run: |
+          uv run scripts/01_descargar_datos.py
+          uv run scripts/02_explorar_fixtures_2026.py
+          uv run scripts/03_modelo_elo.py
+          uv run scripts/04_modelo_poisson.py
+          uv run scripts/06_simulacion.py
+
+      - name: Commit y push si hay cambios
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/processed
+          if git diff --staged --quiet; then
+            echo "Sin cambios en los datos; nada que commitear."
+          else
+            git commit -m "chore(datos): actualizacion automatica del Mundial 2026 [skip ci]"
+            git push
+          fi

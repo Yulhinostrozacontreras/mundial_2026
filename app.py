@@ -4,6 +4,9 @@ Correr en su propio puerto, independiente de otras apps:
     uv run streamlit run app.py --server.port 8502
 """
 import sys
+from collections import defaultdict
+from datetime import datetime, time
+from itertools import groupby
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
@@ -231,47 +234,119 @@ with tab_dash:
 
 # ================= CRONOGRAMA =================
 DIAS_SEM = {0: "Lun", 1: "Mar", 2: "Mie", 3: "Jue", 4: "Vie", 5: "Sab", 6: "Dom"}
+DIAS_FULL = {0: "Lunes", 1: "Martes", 2: "Miercoles", 3: "Jueves", 4: "Viernes",
+             5: "Sabado", 6: "Domingo"}
+MESES = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
+         7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic"}
+
+CRON_CSS = """<style>
+.day-h{font-size:18px;font-weight:800;color:#222;margin:18px 0 8px;}
+.day-h small{font-weight:500;color:#aab;font-size:13px;}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px;}
+@media(max-width:640px){.cards{grid-template-columns:1fr;}}
+.card{background:#fff;border:1px solid #eef0f3;border-radius:14px;padding:13px 16px;
+      box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.card-h{display:flex;justify-content:space-between;font-size:11px;font-weight:700;
+        color:#8a94a6;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px;}
+.card-h .st-jug{color:#2f9e44;} .card-h .st-pen{color:#adb5bd;}
+.t-row{display:flex;align-items:center;gap:10px;padding:4px 0;}
+.t-flag{font-size:20px;width:24px;text-align:center;}
+.t-name{flex:1;font-size:15px;font-weight:600;color:#222;}
+.t-cod{color:#aab;font-size:12px;font-weight:700;margin-left:6px;}
+.t-sc{min-width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+      font-weight:800;border-radius:7px;font-size:15px;}
+.t-sc.est{background:#f1f3f5;color:#909aa6;}
+.t-sc.real{background:#a01a45;color:#fff;}
+.card-f{margin-top:9px;padding-top:8px;border-top:1px solid #f1f3f5;font-size:12px;
+        color:#868e96;display:flex;gap:14px;flex-wrap:wrap;}
+</style>"""
+
+
+def _cuando(m):
+    hp = horarios.hora_peru(m["home"], m["away"])
+    return hp if hp else datetime.combine(m["fecha"], time.min)
+
+
+def tarjeta_html(m, jornada):
+    ih, ia = geo.info(m["home"]), geo.info(m["away"])
+    j = jornada.get((m["home"], m["away"]), "")
+    est = m["apuestas"]["marcadores_top"][0]["marcador"].split("-")
+    if m["score_real"]:
+        sh, sa, cls = m["score_real"][0], m["score_real"][1], "real"
+        estado = '<span class="st-jug">Jugado</span>'
+    else:
+        sh, sa, cls = est[0], est[1], "est"
+        estado = '<span class="st-pen">Por jugar</span>'
+    hp = _cuando(m)
+    cuando = f'{DIAS_SEM[hp.weekday()]} {hp.day} {MESES[hp.month]} &middot; {hp.strftime("%H:%M")}'
+    sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
+    return (f'<div class="card"><div class="card-h"><span>Grupo {ih["grupo"]} &middot; Jornada {j}</span>{estado}</div>'
+            f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
+            f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
+            f'<span class="t-sc {cls}">{sh}</span></div>'
+            f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
+            f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
+            f'<span class="t-sc {cls}">{sa}</span></div>'
+            f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
 with tab_cron:
     st.subheader("Cronograma de la fase de grupos")
-    st.caption("Sigue cada partido: marcador estimado por el modelo vs marcador real, "
-               "sede y grupo. Filtra por un equipo para seguir su recorrido.")
     partidos_c = get_partidos()
-    c1, c2 = st.columns(2)
-    f_eq = c1.selectbox("Filtrar por equipo", ["Todos"] + sorted(equipos))
-    f_gr = c2.selectbox("Filtrar por grupo", ["Todos"] + sorted({m["grupo"] for m in partidos_c}))
+    grupos_of = sorted({geo.info(m["home"])["grupo"] for m in partidos_c})
 
-    def _cuando(m):
-        return horarios.hora_peru(m["home"], m["away"]) or m["fecha"]
+    c1, c2, c3 = st.columns([2, 2, 3])
+    f_eq = c1.selectbox("Equipo", ["Todos"] + sorted(equipos))
+    f_gr = c2.selectbox("Grupo", ["Todos"] + grupos_of)
+    vista = c3.radio("Vista", ["Tarjetas", "Tabla resumen"], horizontal=True)
 
-    filas = []
-    for m in sorted(partidos_c, key=_cuando):
-        if f_eq != "Todos" and f_eq not in (m["home"], m["away"]):
-            continue
-        if f_gr != "Todos" and m["grupo"] != f_gr:
-            continue
-        hp = horarios.hora_peru(m["home"], m["away"])
-        fecha = f'{DIAS_SEM[hp.weekday()]} {hp.strftime("%d/%m")}' if hp else \
-            f'{DIAS_SEM[m["fecha"].weekday()]} {m["fecha"].strftime("%d/%m")}'
-        hora = hp.strftime("%H:%M") if hp else "-"
-        est = m["apuestas"]["marcadores_top"][0]["marcador"]
-        real = f'{m["score_real"][0]}-{m["score_real"][1]}' if m["score_real"] else "-"
-        sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
-        filas.append({"": "🟢" if m["score_real"] else "⚪",
-                      "Fecha": fecha, "Hora Peru": hora, "Gpo": m["grupo"],
-                      "Partido": f'{m["home"]} vs {m["away"]}',
-                      "Estimado": est, "Real": real, "Sede": sede})
+    # jornada (1-3) por grupo oficial, segun orden de fecha
+    porg = defaultdict(list)
+    for m in partidos_c:
+        porg[geo.info(m["home"])["grupo"]].append(m)
+    jornada = {}
+    for g, ms in porg.items():
+        for i, m in enumerate(sorted(ms, key=_cuando)):
+            jornada[(m["home"], m["away"])] = i // 2 + 1
 
-    if filas:
+    sel = sorted((m for m in partidos_c
+                  if (f_eq == "Todos" or f_eq in (m["home"], m["away"]))
+                  and (f_gr == "Todos" or geo.info(m["home"])["grupo"] == f_gr)), key=_cuando)
+    njug = sum(1 for m in partidos_c if m["score_real"])
+
+    if not sel:
+        st.info("No hay partidos con esos filtros.")
+    elif vista == "Tarjetas":
+        st.caption("El numero gris es el marcador estimado por el modelo; cuando se juegue, "
+                   f"aparece el resultado real en color. {njug}/72 disputados.")
+        html = [CRON_CSS]
+        for dia, ms_iter in groupby(sel, key=lambda m: _cuando(m).date()):
+            ms = list(ms_iter)
+            html.append(f'<div class="day-h">{DIAS_FULL[dia.weekday()]} {dia.day} {MESES[dia.month]} '
+                        f'<small>&middot; {len(ms)} partido{"s" if len(ms) > 1 else ""}</small></div>')
+            html.append('<div class="cards">')
+            html += [tarjeta_html(m, jornada) for m in ms]
+            html.append('</div>')
+        st.markdown("\n".join(html), unsafe_allow_html=True)
+    else:
+        filas = []
+        for m in sel:
+            hp = _cuando(m)
+            est = m["apuestas"]["marcadores_top"][0]["marcador"]
+            real = f'{m["score_real"][0]}-{m["score_real"][1]}' if m["score_real"] else "-"
+            sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
+            filas.append({"": "🟢" if m["score_real"] else "⚪",
+                          "Fecha": f'{DIAS_SEM[hp.weekday()]} {hp.strftime("%d/%m")}',
+                          "Hora Peru": hp.strftime("%H:%M"),
+                          "Gpo": geo.info(m["home"])["grupo"],
+                          "Partido": f'{m["home"]} vs {m["away"]}',
+                          "Estimado": est, "Real": real, "Sede": sede})
         st.dataframe(pl.DataFrame(filas), hide_index=True, width="stretch",
                      column_config={"": st.column_config.TextColumn(width="small"),
-                                    "Hora Peru": st.column_config.TextColumn(help="Hora de inicio en horario de Peru (UTC-5)"),
+                                    "Hora Peru": st.column_config.TextColumn(help="Hora de inicio en Peru (UTC-5)"),
                                     "Estimado": st.column_config.TextColumn(help="Marcador mas probable (Dixon-Coles)"),
                                     "Real": st.column_config.TextColumn(help="Resultado real (cuando se juega)")})
-        st.caption(f"🟢 jugado · ⚪ pendiente · {sum(1 for m in partidos_c if m['score_real'])}/72 disputados. "
+        st.caption(f"🟢 jugado · ⚪ pendiente · {njug}/72 disputados. "
                    "Hora y fecha en horario de Peru (UTC-5); calendario oficial via Wikipedia.")
-    else:
-        st.info("No hay partidos con esos filtros.")
 
 
 # ================= PRONOSTICO =================

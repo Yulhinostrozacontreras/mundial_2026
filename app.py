@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 import altair as alt
 import plotly.express as px
+import plotly.graph_objects as go
 import polars as pl
 import streamlit as st
 
@@ -117,6 +118,22 @@ def mapa_mundial(base_df):
     return fig
 
 
+def dona_reparto(base_df, n=6):
+    """Dona con el reparto de la probabilidad de campeon (top n + resto)."""
+    top = base_df.head(n)
+    labels = top["equipo"].to_list() + ["Otros"]
+    vals = top["campeon_Elo"].to_list() + [max(0.0, 1.0 - float(top["campeon_Elo"].sum()))]
+    colores = ["#a01a45", "#e8590c", "#f1b305", "#3b5bdb", "#2f9e44", "#9c36b5", "#ced4da"]
+    fig = go.Figure(go.Pie(labels=labels, values=vals, hole=0.58,
+                           marker=dict(colors=colores[:len(labels)], line=dict(color="#fff", width=2)),
+                           sort=False, direction="clockwise", textinfo="label+percent",
+                           textfont_size=11,
+                           hovertemplate="<b>%{label}</b><br>%{percent}<extra></extra>"))
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=300, showlegend=False,
+                      annotations=[dict(text="Campeon", x=0.5, y=0.5, font_size=13, showarrow=False)])
+    return fig
+
+
 ins = get_insumos()
 equipos = ins["equipos"]
 
@@ -155,33 +172,59 @@ tab_dash, tab_pron, tab_brk, tab_grp, tab_camino, tab_esc, tab_comp = st.tabs(
 
 # ================= DASHBOARD (vista editorial) =================
 with tab_dash:
-    champ = base.head(1).to_dicts()[0]
-    sub = base.head(3).to_dicts()
+    duo = base.head(2).to_dicts()
+    a, b = duo[0], duo[1]
+    tot = a["campeon_Elo"] + b["campeon_Elo"]
+    wa = a["campeon_Elo"] / tot * 100
     njug = len(ins["jugados"])
-    estado = f"partidos de grupo jugados: {njug}/72" if njug else "el torneo aun no comienza"
-    st.caption(f"Pronostico Monte Carlo · {int(n_sims):,} torneos · motor Elo · {estado}")
+    estado = (f"Fase de grupos &middot; {njug}/72 partidos jugados"
+              if njug else "El torneo arranca el 11 de junio")
 
-    cmap, cinfo = st.columns([3, 2], gap="large")
+    # ---- header de "duelo" entre los dos favoritos ----
+    cL, cM, cR = st.columns([2, 3, 2], vertical_alignment="center")
+    cL.markdown(
+        f'<div style="text-align:center"><div style="font-size:15px;font-weight:700;color:#222">{a["equipo"]}</div>'
+        f'<div style="font-size:34px;font-weight:800;color:{NARANJA};line-height:1.1">{a["campeon_Elo"]:.1%}</div>'
+        f'<div style="font-size:11px;color:#888">Grupo {a["grupo"]} &middot; prob. campeon</div></div>',
+        unsafe_allow_html=True)
+    cR.markdown(
+        f'<div style="text-align:center"><div style="font-size:15px;font-weight:700;color:#222">{b["equipo"]}</div>'
+        f'<div style="font-size:34px;font-weight:800;color:{AZUL};line-height:1.1">{b["campeon_Elo"]:.1%}</div>'
+        f'<div style="font-size:11px;color:#888">Grupo {b["grupo"]} &middot; prob. campeon</div></div>',
+        unsafe_allow_html=True)
+    cM.markdown(
+        f'<div style="text-align:center;font-size:12px;color:#666;font-weight:600;margin-bottom:4px">'
+        f'PRONOSTICO MUNDIAL 2026 &middot; {estado}</div>'
+        f'<div style="display:flex;height:26px;border-radius:13px;overflow:hidden;'
+        f'box-shadow:inset 0 1px 3px rgba(0,0,0,.15);font-size:12px;font-weight:800;color:#fff">'
+        f'<div style="width:{wa:.1f}%;background:{NARANJA};display:flex;align-items:center;'
+        f'justify-content:flex-start;padding-left:8px">{wa:.0f}%</div>'
+        f'<div style="width:{100-wa:.1f}%;background:{AZUL};display:flex;align-items:center;'
+        f'justify-content:flex-end;padding-right:8px">{100-wa:.0f}%</div></div>'
+        f'<div style="text-align:center;font-size:11px;color:#999;margin-top:4px">'
+        f'reparto relativo entre los dos favoritos</div>', unsafe_allow_html=True)
+    st.divider()
+
+    # ---- mapa mundial + dona de reparto ----
+    cmap, cdona = st.columns([3, 2], gap="large")
     with cmap:
-        st.markdown("**Probabilidad de ser campeon — mapa mundial**")
-        st.plotly_chart(mapa_mundial(base), width="stretch",
-                        config={"displayModeBar": False})
-    with cinfo:
-        st.markdown(
-            f'<div class="kpi oro"><div class="sub">Campeon proyectado · Grupo {champ["grupo"]}</div>'
-            f'<div class="eq">{champ["equipo"]}</div>'
-            f'<div class="pc">{champ["campeon_Elo"]:.0%}</div>'
-            f'<div class="sub">llega a la final {champ["final_Elo"]:.0%}</div></div>',
-            unsafe_allow_html=True)
-        st.write("")
-        top10 = base.head(10).to_pandas()
-        ch = (alt.Chart(top10).mark_bar(color=ROJO, cornerRadiusEnd=3)
-              .encode(x=alt.X("campeon_Elo:Q", title=None, axis=alt.Axis(format="%")),
-                      y=alt.Y("equipo:N", sort="-x", title=None),
-                      tooltip=[alt.Tooltip("equipo:N", title="Equipo"),
-                               alt.Tooltip("campeon_Elo:Q", title="Campeon", format=".1%")])
-              .properties(height=300))
-        st.altair_chart(ch, width="stretch")
+        st.markdown("**Probabilidad de ser campeon &mdash; mapa mundial**", unsafe_allow_html=True)
+        st.plotly_chart(mapa_mundial(base), width="stretch", config={"displayModeBar": False})
+    with cdona:
+        st.markdown("**Reparto del titulo**")
+        st.plotly_chart(dona_reparto(base), width="stretch", config={"displayModeBar": False})
+        st.caption(f"Monte Carlo &middot; {int(n_sims):,} torneos &middot; motor Elo")
+
+    # ---- barras top-10 ----
+    st.markdown("**Favoritos al titulo (top 10)**")
+    top10 = base.head(10).to_pandas()
+    ch = (alt.Chart(top10).mark_bar(color=ROJO, cornerRadiusEnd=3)
+          .encode(x=alt.X("campeon_Elo:Q", title=None, axis=alt.Axis(format="%")),
+                  y=alt.Y("equipo:N", sort="-x", title=None),
+                  tooltip=[alt.Tooltip("equipo:N", title="Equipo"),
+                           alt.Tooltip("campeon_Elo:Q", title="Campeon", format=".1%")])
+          .properties(height=280))
+    st.altair_chart(ch, width="stretch")
     st.caption("El mapa colorea cada pais por su probabilidad de campeon. Inglaterra y Escocia "
                "comparten el codigo del Reino Unido: se muestra el mas probable de los dos.")
 

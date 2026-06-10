@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 import polars as pl
 import streamlit as st
 
-from mundial import apuestas, geo, torneo
+from mundial import apuestas, geo, horarios, torneo
 
 st.set_page_config(page_title="Mundial 2026 - Pronostico", page_icon="🏆", layout="wide")
 
@@ -241,28 +241,35 @@ with tab_cron:
     f_eq = c1.selectbox("Filtrar por equipo", ["Todos"] + sorted(equipos))
     f_gr = c2.selectbox("Filtrar por grupo", ["Todos"] + sorted({m["grupo"] for m in partidos_c}))
 
+    def _cuando(m):
+        return horarios.hora_peru(m["home"], m["away"]) or m["fecha"]
+
     filas = []
-    for m in sorted(partidos_c, key=lambda x: (x["fecha"], x["home"])):
+    for m in sorted(partidos_c, key=_cuando):
         if f_eq != "Todos" and f_eq not in (m["home"], m["away"]):
             continue
         if f_gr != "Todos" and m["grupo"] != f_gr:
             continue
+        hp = horarios.hora_peru(m["home"], m["away"])
+        fecha = f'{DIAS_SEM[hp.weekday()]} {hp.strftime("%d/%m")}' if hp else \
+            f'{DIAS_SEM[m["fecha"].weekday()]} {m["fecha"].strftime("%d/%m")}'
+        hora = hp.strftime("%H:%M") if hp else "-"
         est = m["apuestas"]["marcadores_top"][0]["marcador"]
         real = f'{m["score_real"][0]}-{m["score_real"][1]}' if m["score_real"] else "-"
         sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
         filas.append({"": "🟢" if m["score_real"] else "⚪",
-                      "Fecha": f'{DIAS_SEM[m["fecha"].weekday()]} {m["fecha"].strftime("%d/%m")}',
-                      "Gpo": m["grupo"],
+                      "Fecha": fecha, "Hora Peru": hora, "Gpo": m["grupo"],
                       "Partido": f'{m["home"]} vs {m["away"]}',
                       "Estimado": est, "Real": real, "Sede": sede})
 
     if filas:
         st.dataframe(pl.DataFrame(filas), hide_index=True, width="stretch",
                      column_config={"": st.column_config.TextColumn(width="small"),
+                                    "Hora Peru": st.column_config.TextColumn(help="Hora de inicio en horario de Peru (UTC-5)"),
                                     "Estimado": st.column_config.TextColumn(help="Marcador mas probable (Dixon-Coles)"),
                                     "Real": st.column_config.TextColumn(help="Resultado real (cuando se juega)")})
         st.caption(f"🟢 jugado · ⚪ pendiente · {sum(1 for m in partidos_c if m['score_real'])}/72 disputados. "
-                   "La hora exacta por partido (en horario de Peru) se agregara con el calendario oficial.")
+                   "Hora y fecha en horario de Peru (UTC-5); calendario oficial via Wikipedia.")
     else:
         st.info("No hay partidos con esos filtros.")
 

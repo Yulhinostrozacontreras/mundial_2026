@@ -1,0 +1,13 @@
+# Datos: el CSV crudo es pesado (~3.7MB) y se regenera con el script 01.
+# Los parquets procesados SI se versionan: la app desplegada los necesita para arrancar.
+data/raw/*.csv
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.uv/
+
+# IDE
+.vscode/
+.idea/

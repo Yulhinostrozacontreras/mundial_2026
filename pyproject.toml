@@ -1,0 +1,18 @@
+[project]
+name = "mundial-2026"
+version = "0.1.0"
+description = "Modelo predictivo del Mundial 2026: Poisson/Dixon-Coles vs Elo + simulacion Monte Carlo"
+requires-python = ">=3.11"
+dependencies = [
+    "polars>=1.0",
+    "duckdb>=1.0",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pyarrow>=15.0",
+    "requests>=2.31",
+    "streamlit>=1.40",
+    "altair>=5.0",
+]
+
+[tool.uv]
+package = false

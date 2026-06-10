@@ -229,9 +229,11 @@ def tabla_grupos(ins: dict) -> dict:
 
 
 def partidos_grupos(ins: dict) -> list:
-    """Los 72 partidos de grupos con prob (Elo) y marcador estimado (DC)."""
+    """Los 72 partidos de grupos con prob (Elo), marcador estimado (DC), sede y
+    score real (si el partido ya se jugo)."""
     fixtures = pl.read_parquet(PROC / "fixtures_2026.parquet")
     idx = ins["idx"]
+    jugados = ins.get("jugados", {})
     out = []
     for row in fixtures.iter_rows(named=True):
         h, a = row["home_team"], row["away_team"]
@@ -240,7 +242,9 @@ def partidos_grupos(ins: dict) -> list:
         out.append(dict(grupo=ins["team2grupo"][ih], fecha=row["date"], home=h, away=a,
                         p_home=pH, p_draw=pD, p_away=pA,
                         gol_home=_gol_esperado(ins, ih, ia),
-                        gol_away=_gol_esperado(ins, ia, ih)))
+                        gol_away=_gol_esperado(ins, ia, ih),
+                        city=row.get("city"), country=row.get("country"),
+                        score_real=jugados.get((ih, ia))))
     return out
 
 

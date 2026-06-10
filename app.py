@@ -166,8 +166,8 @@ for col, row, cls in zip(cols, top3, clases):
         unsafe_allow_html=True)
 st.write("")
 
-tab_dash, tab_pron, tab_brk, tab_grp, tab_camino, tab_esc, tab_comp = st.tabs(
-    ["🗺️ Dashboard", "📊 Pronostico", "🏆 Bracket", "🏟️ Fase de grupos",
+tab_dash, tab_cron, tab_pron, tab_brk, tab_grp, tab_camino, tab_esc, tab_comp = st.tabs(
+    ["🗺️ Dashboard", "📅 Cronograma", "📊 Pronostico", "🏆 Bracket", "🏟️ Fase de grupos",
      "🎯 Camino de un equipo", "🔮 Que pasaria si", "⚖️ Motores"])
 
 # ================= DASHBOARD (vista editorial) =================
@@ -227,6 +227,45 @@ with tab_dash:
     st.altair_chart(ch, width="stretch")
     st.caption("El mapa colorea cada pais por su probabilidad de campeon. Inglaterra y Escocia "
                "comparten el codigo del Reino Unido: se muestra el mas probable de los dos.")
+
+
+# ================= CRONOGRAMA =================
+DIAS_SEM = {0: "Lun", 1: "Mar", 2: "Mie", 3: "Jue", 4: "Vie", 5: "Sab", 6: "Dom"}
+
+with tab_cron:
+    st.subheader("Cronograma de la fase de grupos")
+    st.caption("Sigue cada partido: marcador estimado por el modelo vs marcador real, "
+               "sede y grupo. Filtra por un equipo para seguir su recorrido.")
+    partidos_c = get_partidos()
+    c1, c2 = st.columns(2)
+    f_eq = c1.selectbox("Filtrar por equipo", ["Todos"] + sorted(equipos))
+    f_gr = c2.selectbox("Filtrar por grupo", ["Todos"] + sorted({m["grupo"] for m in partidos_c}))
+
+    filas = []
+    for m in sorted(partidos_c, key=lambda x: (x["fecha"], x["home"])):
+        if f_eq != "Todos" and f_eq not in (m["home"], m["away"]):
+            continue
+        if f_gr != "Todos" and m["grupo"] != f_gr:
+            continue
+        est = m["apuestas"]["marcadores_top"][0]["marcador"]
+        real = f'{m["score_real"][0]}-{m["score_real"][1]}' if m["score_real"] else "-"
+        sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
+        filas.append({"": "🟢" if m["score_real"] else "⚪",
+                      "Fecha": f'{DIAS_SEM[m["fecha"].weekday()]} {m["fecha"].strftime("%d/%m")}',
+                      "Gpo": m["grupo"],
+                      "Partido": f'{m["home"]} vs {m["away"]}',
+                      "Estimado": est, "Real": real, "Sede": sede})
+
+    if filas:
+        st.dataframe(pl.DataFrame(filas), hide_index=True, width="stretch",
+                     column_config={"": st.column_config.TextColumn(width="small"),
+                                    "Estimado": st.column_config.TextColumn(help="Marcador mas probable (Dixon-Coles)"),
+                                    "Real": st.column_config.TextColumn(help="Resultado real (cuando se juega)")})
+        st.caption(f"🟢 jugado · ⚪ pendiente · {sum(1 for m in partidos_c if m['score_real'])}/72 disputados. "
+                   "La hora exacta por partido (en horario de Peru) se agregara con el calendario oficial.")
+    else:
+        st.info("No hay partidos con esos filtros.")
+
 
 # ================= PRONOSTICO =================
 with tab_pron:

@@ -9,10 +9,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 import altair as alt
+import plotly.express as px
 import polars as pl
 import streamlit as st
 
-from mundial import apuestas, torneo
+from mundial import apuestas, geo, torneo
 
 st.set_page_config(page_title="Mundial 2026 - Pronostico", page_icon="🏆", layout="wide")
 
@@ -93,6 +94,29 @@ def get_backtest():
     return pl.read_parquet(p) if p.exists() else None
 
 
+def mapa_mundial(base_df):
+    """Choropleth: cada pais coloreado por su probabilidad de ser campeon (Elo)."""
+    df = (base_df.select("equipo", "campeon_Elo")
+          .with_columns(pl.col("equipo").replace_strict(geo.ISO3, default=None).alias("iso3"))
+          .drop_nulls("iso3"))
+    # England/Scotland comparten GBR: nos quedamos con el mas probable
+    df = df.group_by("iso3").agg(
+        pl.col("campeon_Elo").max(),
+        pl.col("equipo").sort_by("campeon_Elo", descending=True).first())
+    pdf = df.to_pandas()
+    fig = px.choropleth(pdf, locations="iso3", color="campeon_Elo", hover_name="equipo",
+                        color_continuous_scale="Reds",
+                        range_color=(0, float(pdf["campeon_Elo"].max())))
+    fig.update_traces(hovertemplate="<b>%{hovertext}</b><br>Campeon: %{z:.1%}<extra></extra>",
+                      marker_line_color="#fff", marker_line_width=0.4)
+    fig.update_geos(showframe=False, showcoastlines=False, landcolor="#ececec",
+                    showocean=True, oceancolor="#f7f9fc",
+                    projection_type="natural earth", bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=430,
+                      coloraxis_colorbar=dict(title="P(campeon)", tickformat=".0%", thickness=12))
+    return fig
+
+
 ins = get_insumos()
 equipos = ins["equipos"]
 
@@ -125,9 +149,41 @@ for col, row, cls in zip(cols, top3, clases):
         unsafe_allow_html=True)
 st.write("")
 
-tab_pron, tab_brk, tab_grp, tab_camino, tab_esc, tab_comp = st.tabs(
-    ["📊 Pronostico", "🗺️ Bracket", "🏟️ Fase de grupos", "🎯 Camino de un equipo",
-     "🔮 Que pasaria si", "⚖️ Motores"])
+tab_dash, tab_pron, tab_brk, tab_grp, tab_camino, tab_esc, tab_comp = st.tabs(
+    ["🗺️ Dashboard", "📊 Pronostico", "🏆 Bracket", "🏟️ Fase de grupos",
+     "🎯 Camino de un equipo", "🔮 Que pasaria si", "⚖️ Motores"])
+
+# ================= DASHBOARD (vista editorial) =================
+with tab_dash:
+    champ = base.head(1).to_dicts()[0]
+    sub = base.head(3).to_dicts()
+    njug = len(ins["jugados"])
+    estado = f"partidos de grupo jugados: {njug}/72" if njug else "el torneo aun no comienza"
+    st.caption(f"Pronostico Monte Carlo · {int(n_sims):,} torneos · motor Elo · {estado}")
+
+    cmap, cinfo = st.columns([3, 2], gap="large")
+    with cmap:
+        st.markdown("**Probabilidad de ser campeon — mapa mundial**")
+        st.plotly_chart(mapa_mundial(base), width="stretch",
+                        config={"displayModeBar": False})
+    with cinfo:
+        st.markdown(
+            f'<div class="kpi oro"><div class="sub">Campeon proyectado · Grupo {champ["grupo"]}</div>'
+            f'<div class="eq">{champ["equipo"]}</div>'
+            f'<div class="pc">{champ["campeon_Elo"]:.0%}</div>'
+            f'<div class="sub">llega a la final {champ["final_Elo"]:.0%}</div></div>',
+            unsafe_allow_html=True)
+        st.write("")
+        top10 = base.head(10).to_pandas()
+        ch = (alt.Chart(top10).mark_bar(color=ROJO, cornerRadiusEnd=3)
+              .encode(x=alt.X("campeon_Elo:Q", title=None, axis=alt.Axis(format="%")),
+                      y=alt.Y("equipo:N", sort="-x", title=None),
+                      tooltip=[alt.Tooltip("equipo:N", title="Equipo"),
+                               alt.Tooltip("campeon_Elo:Q", title="Campeon", format=".1%")])
+              .properties(height=300))
+        st.altair_chart(ch, width="stretch")
+    st.caption("El mapa colorea cada pais por su probabilidad de campeon. Inglaterra y Escocia "
+               "comparten el codigo del Reino Unido: se muestra el mas probable de los dos.")
 
 # ================= PRONOSTICO =================
 with tab_pron:
@@ -257,7 +313,7 @@ with tab_grp:
                             f"<span style='color:#888;font-size:12px'>Elo: L {m['p_home']:.0%} · "
                             f"E {m['p_draw']:.0%} · V {m['p_away']:.0%}</span>",
                             unsafe_allow_html=True)
-                        with c3.popover("🎲 Jugadas", use_container_width=True):
+                        with c3.popover("🎲 Jugadas", width="stretch"):
                             render_jugadas(m)
     st.caption("🟢 clasifica directo (1ro/2do) · 🟡 mejor tercero que avanza · ⚪ eliminado (proyeccion)")
 

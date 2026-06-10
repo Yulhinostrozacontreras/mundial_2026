@@ -12,6 +12,7 @@ dependencies = [
     "requests>=2.31",
     "streamlit>=1.40",
     "altair>=5.0",
+    "plotly>=6.8.0",
 ]
 
 [tool.uv]

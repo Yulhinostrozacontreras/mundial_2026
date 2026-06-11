@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 3
+CACHE_VER = 4
 
 
 @st.cache_resource
@@ -83,7 +83,8 @@ def get_bracket(ver: int = CACHE_VER):
 @st.cache_data
 def get_tabla_grupos(ver: int = CACHE_VER):
     ins = get_insumos()
-    return {l: [(ins["equipos"][i], pts) for i, pts in v]
+    og = ins["oficial_de_grupo"]
+    return {og[l]: [(ins["equipos"][i], pts) for i, pts in v]
             for l, v in torneo.tabla_grupos(ins).items()}
 
 

@@ -225,7 +225,8 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
 def tabla_resultados(ins: dict, sim: dict) -> pl.DataFrame:
     """DataFrame con probabilidades por etapa y motor, por equipo."""
     eq = ins["equipos"]
-    filas = {"equipo": eq, "grupo": [ins["team2grupo"][i] for i in range(ins["nt"])],
+    og = ins["oficial_de_grupo"]
+    filas = {"equipo": eq, "grupo": [og[ins["team2grupo"][i]] for i in range(ins["nt"])],
              "elo": ins["elo"]}
     for et, nom in ETAPAS.items():
         filas[f"{nom}_DC"] = sim["dc"][et]
@@ -279,7 +280,7 @@ def partidos_grupos(ins: dict) -> list:
         h, a = row["home_team"], row["away_team"]
         ih, ia = idx[h], idx[a]
         pH, pD, pA = _elo_wdl(ins, ih, ia)
-        out.append(dict(grupo=ins["team2grupo"][ih], fecha=row["date"], home=h, away=a,
+        out.append(dict(grupo=ins["oficial_de_grupo"][ins["team2grupo"][ih]], fecha=row["date"], home=h, away=a,
                         p_home=pH, p_draw=pD, p_away=pA,
                         gol_home=_gol_esperado(ins, ih, ia),
                         gol_away=_gol_esperado(ins, ia, ih),

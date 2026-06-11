@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 4
+CACHE_VER = 5
 
 
 @st.cache_resource
@@ -69,7 +69,7 @@ def get_insumos(ver: int = CACHE_VER):
 
 @st.cache_data
 def get_sim(n_sims: int, seed: int, delta_items: tuple, ver: int = CACHE_VER):
-    ins = get_insumos()
+    ins = get_insumos(CACHE_VER)
     elo_delta = {k: v for k, v in delta_items} if delta_items else None
     sim = torneo.simular(ins, n_sims=n_sims, seed=seed, elo_delta=elo_delta)
     return torneo.tabla_resultados(ins, sim)
@@ -77,12 +77,12 @@ def get_sim(n_sims: int, seed: int, delta_items: tuple, ver: int = CACHE_VER):
 
 @st.cache_data
 def get_bracket(ver: int = CACHE_VER):
-    return torneo.bracket_proyectado(get_insumos())
+    return torneo.bracket_proyectado(get_insumos(CACHE_VER))
 
 
 @st.cache_data
 def get_tabla_grupos(ver: int = CACHE_VER):
-    ins = get_insumos()
+    ins = get_insumos(CACHE_VER)
     og = ins["oficial_de_grupo"]
     return {og[l]: [(ins["equipos"][i], pts) for i, pts in v]
             for l, v in torneo.tabla_grupos(ins).items()}
@@ -91,7 +91,7 @@ def get_tabla_grupos(ver: int = CACHE_VER):
 def get_partidos():
     # sin cache a proposito: se deriva de funciones externas que evolucionan, y es
     # barato; cachearlo causaba KeyError al servir estructuras viejas tras un deploy.
-    ins = get_insumos()
+    ins = get_insumos(CACHE_VER)
     ps = torneo.partidos_grupos(ins)
     for m in ps:
         m["apuestas"] = apuestas.mercados(m["gol_home"], m["gol_away"], ins["rho"],
@@ -144,7 +144,7 @@ def dona_reparto(base_df, n=6):
     return fig
 
 
-ins = get_insumos()
+ins = get_insumos(CACHE_VER)
 equipos = ins["equipos"]
 
 # ---------- header ----------

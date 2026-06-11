@@ -429,7 +429,7 @@ with tab_brk:
                "Es el escenario 'chalk' (sin sorpresas); las probabilidades reales estan en las otras pestañas.")
     rondas = get_bracket()
     st.caption("👉 En el celular, desliza el cuadro horizontalmente para verlo completo.")
-    st.iframe(render_bracket(rondas), height=620, scrolling=True)
+    st.iframe(render_bracket(rondas), height=620)
     fin = rondas[4]
     st.success(f"**Final proyectada:** {fin[0]}  vs  {fin[1]}   →   Campeon: **{rondas[5][0]}**")
     st.caption("Estructura oficial FIFA de la ronda de 32 al titulo. Los 8 mejores terceros se "

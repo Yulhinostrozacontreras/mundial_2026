@@ -404,9 +404,10 @@ def render_bracket(rondas):
 
     css = """<style>
     *{box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;}
-    body{margin:0;overflow-x:auto;}
+    html,body{margin:0;padding:0;}
+    .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;padding-bottom:8px;}
     .wrap{background:linear-gradient(135deg,#a01a45,#5c0d28);padding:14px;border-radius:12px;
-          display:flex;justify-content:center;gap:4px;min-width:720px;}
+          display:flex;justify-content:flex-start;gap:4px;min-width:760px;}
     .col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:84px;}
     .lbl{color:#ffd9e4;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:6px;letter-spacing:.5px;}
     .stk{flex:1;display:flex;flex-direction:column;justify-content:space-around;width:100%;gap:2px;}
@@ -419,7 +420,7 @@ def render_bracket(rondas):
     .center{justify-content:center;flex:1.3;}
     .cup{font-size:30px;margin:6px 0;}
     </style>"""
-    return css + f'<div class="wrap">{left}{center}{right}</div>'
+    return css + f'<div class="scroll"><div class="wrap">{left}{center}{right}</div></div>'
 
 
 with tab_brk:
@@ -427,10 +428,12 @@ with tab_brk:
     st.caption("Bracket determinista: en cada llave avanza el equipo de mayor fuerza (Elo). "
                "Es el escenario 'chalk' (sin sorpresas); las probabilidades reales estan en las otras pestañas.")
     rondas = get_bracket()
-    st.iframe(render_bracket(rondas), height=620)
+    st.caption("👉 En el celular, desliza el cuadro horizontalmente para verlo completo.")
+    st.iframe(render_bracket(rondas), height=620, scrolling=True)
     fin = rondas[4]
     st.success(f"**Final proyectada:** {fin[0]}  vs  {fin[1]}   →   Campeon: **{rondas[5][0]}**")
-    st.caption("Limitacion: el cruce usa siembra por Elo, no la tabla oficial FIFA de los 8 mejores terceros.")
+    st.caption("Estructura oficial FIFA de la ronda de 32 al titulo. Los 8 mejores terceros se "
+               "asignan por ranking (aproximacion de la tabla oficial de combinaciones).")
 
 
 # ================= FASE DE GRUPOS =================

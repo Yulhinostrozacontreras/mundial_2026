@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 2
+CACHE_VER = 3
 
 
 @st.cache_resource

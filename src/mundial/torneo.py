@@ -6,8 +6,26 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from . import geo
+
 PROC = Path(__file__).resolve().parents[2] / "data" / "processed"
 ETAPAS = {32: "avanza", 16: "R16", 8: "cuartos", 4: "semis", 2: "final", 1: "campeon"}
+
+# --- Bracket OFICIAL del Mundial 2026 (estructura FIFA, letras de grupo oficiales) ---
+# Ronda de 32: cada partido es (slot, slot). slot = ('W', letra) ganador de grupo,
+# ('R', letra) segundo, ('T', k) k-esimo mejor tercero (k=0..7).
+R32_BRACKET = [
+    (("R", "A"), ("R", "B")), (("W", "E"), ("T", 0)), (("W", "F"), ("R", "C")),
+    (("W", "C"), ("R", "F")), (("W", "I"), ("T", 1)), (("R", "E"), ("R", "I")),
+    (("W", "A"), ("T", 2)), (("W", "L"), ("T", 3)), (("W", "D"), ("T", 4)),
+    (("W", "G"), ("T", 5)), (("R", "K"), ("R", "L")), (("W", "H"), ("R", "J")),
+    (("W", "B"), ("T", 6)), (("W", "J"), ("R", "H")), (("W", "K"), ("T", 7)),
+    (("R", "D"), ("R", "G")),
+]
+# pares (por indice 0..15 del R32) que se enfrentan en cada ronda siguiente
+R16_PAIRS = [(1, 4), (0, 2), (3, 5), (6, 7), (10, 11), (8, 9), (13, 15), (12, 14)]
+QF_PAIRS = [(0, 1), (4, 5), (2, 3), (6, 7)]
+SF_PAIRS = [(0, 1), (2, 3)]
 
 
 def cargar_insumos() -> dict:
@@ -49,10 +67,13 @@ def cargar_insumos() -> dict:
         if (r["home_team"], r["away_team"]) in fix_set:
             jugados[(idx[r["home_team"]], idx[r["away_team"]])] = (int(r["home_score"]), int(r["away_score"]))
 
+    # mapeo de cada grupo interno (arbitrario) a su letra OFICIAL FIFA
+    oficial_de_grupo = {l: geo.INFO[equipos[ms[0]]][3] for l, ms in grupos.items()}
+
     return dict(equipos=equipos, idx=idx, att=att, deff=deff, base=dc["base"],
                 rho=dc["rho"], elo=elo, S=float(cal["s"][0]), theta=float(cal["theta"][0]),
                 grupos=grupos, team2grupo=team2grupo, fix_por_grupo=fix_por_grupo,
-                jugados=jugados, nt=len(equipos))
+                oficial_de_grupo=oficial_de_grupo, jugados=jugados, nt=len(equipos))
 
 
 def _sig(u):
@@ -159,20 +180,39 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
         coinA = rng.random(A.shape) < 1.0 / (1.0 + 10.0 ** (-(elo[A] - elo[B]) / 400.0))
         return np.where(r < pH, A, np.where(r < pnl, np.where(coinA, A, B), B))
 
-    def knockout(qual, match_fn):
-        sortq = np.take_along_axis(qual, np.argsort(-elo[qual], axis=1), 1)
-        cur = sortq[:, ORDER]
-        etapas = {32: cur}
-        while cur.shape[1] > 1:
-            p = cur.reshape(cur.shape[0], cur.shape[1] // 2, 2)
-            cur = match_fn(p[:, :, 0], p[:, :, 1])
-            etapas[cur.shape[1]] = cur
-        return {k: np.bincount(v.ravel(), minlength=NT) / n_sims for k, v in etapas.items()}
+    oficial = ins["oficial_de_grupo"]
+    ls = list(grupos)
+
+    def knockout(res, match_fn):
+        """Bracket OFICIAL FIFA: emparejamientos fijos de 1ros/2dos por letra de
+        grupo; los 8 mejores terceros se asignan a sus slots por ranking de tercero
+        (aproxima la tabla oficial de 495 combinaciones; no afecta a 1ros/2dos)."""
+        W_of = {oficial[l]: res[l]["w"] for l in ls}
+        R_of = {oficial[l]: res[l]["r"] for l in ls}
+        T = np.stack([res[l]["t"] for l in ls], 1)
+        TS = np.stack([res[l]["ts"] for l in ls], 1)
+        thirds = np.take_along_axis(T, np.argsort(-TS, axis=1)[:, :8], 1)  # (n,8) por TS
+
+        def slot(s):
+            tipo, key = s
+            return W_of[key] if tipo == "W" else (R_of[key] if tipo == "R" else thirds[:, key])
+
+        r32 = [match_fn(slot(s1), slot(s2)) for s1, s2 in R32_BRACKET]
+        r16 = [match_fn(r32[i], r32[j]) for i, j in R16_PAIRS]
+        qf = [match_fn(r16[i], r16[j]) for i, j in QF_PAIRS]
+        sf = [match_fn(qf[i], qf[j]) for i, j in SF_PAIRS]
+        champ = match_fn(sf[0], sf[1])
+
+        qual32 = np.concatenate([np.stack([res[l]["w"] for l in ls], 1),
+                                 np.stack([res[l]["r"] for l in ls], 1), thirds], 1).ravel()
+        etapas = {32: qual32, 16: np.concatenate(r32), 8: np.concatenate(r16),
+                  4: np.concatenate(qf), 2: np.concatenate(sf), 1: champ}
+        return {k: np.bincount(v, minlength=NT) / n_sims for k, v in etapas.items()}
 
     g_dc = standings_dc()
     g_el = standings_elo()
-    cnt_dc = knockout(clasificados(g_dc), match_dc)
-    cnt_el = knockout(clasificados(g_el), match_elo)
+    cnt_dc = knockout(g_dc, match_dc)
+    cnt_el = knockout(g_el, match_elo)
     # prob de quedar 1ro / 2do de grupo (motor Elo, el mejor calibrado)
     prim = np.zeros(NT); seg = np.zeros(NT)
     for l in grupos:
@@ -248,27 +288,34 @@ def partidos_grupos(ins: dict) -> list:
     return out
 
 
+# orden de las llaves del R32 segun el arbol oficial (para dibujar el bracket lineal)
+_LAYOUT_R32 = [1, 4, 0, 2, 10, 11, 8, 9, 3, 5, 6, 7, 13, 15, 12, 14]
+
+
 def bracket_proyectado(ins: dict) -> list:
-    """Bracket determinista (favorito por Elo en cada llave).
+    """Bracket determinista OFICIAL (favorito por Elo en cada llave).
 
     Devuelve [nombres_R32(32), R16(16), QF(8), SF(4), F(2), campeon(1)]
-    en orden de llave; las dos mitades solo se cruzan en la final.
+    en orden de llave; usa la estructura oficial FIFA (no la siembra por Elo).
     """
     tg = tabla_grupos(ins)
-    ls = list(ins["grupos"])
-    winners = [tg[l][0][0] for l in ls]
-    runners = [tg[l][1][0] for l in ls]
-    thirds = sorted([(tg[l][2][0], tg[l][2][1]) for l in ls], key=lambda x: -x[1])[:8]
-    qual = np.array(winners + runners + [t[0] for t in thirds])
+    oficial = ins["oficial_de_grupo"]
+    W = {oficial[l]: tg[l][0][0] for l in tg}
+    R = {oficial[l]: tg[l][1][0] for l in tg}
+    thirds = [t[0] for t in sorted([(tg[l][2][0], tg[l][2][1]) for l in tg],
+                                   key=lambda x: -x[1])[:8]]
+    elo = ins["elo"]
 
-    sembrado = qual[np.argsort(-ins["elo"][qual])]
-    slots = sembrado[ORDER]
-    rondas = [slots.tolist()]
-    cur = slots
+    def slot(s):
+        tipo, key = s
+        return W[key] if tipo == "W" else (R[key] if tipo == "R" else thirds[key])
+
+    # equipos del R32 en orden de layout (los pares que se unen quedan consecutivos)
+    cur = [t for i in _LAYOUT_R32 for t in (slot(R32_BRACKET[i][0]), slot(R32_BRACKET[i][1]))]
+    rondas = [cur]
     while len(cur) > 1:
-        nxt = [cur[k] if ins["elo"][cur[k]] >= ins["elo"][cur[k + 1]] else cur[k + 1]
+        cur = [cur[k] if elo[cur[k]] >= elo[cur[k + 1]] else cur[k + 1]
                for k in range(0, len(cur), 2)]
-        cur = np.array(nxt)
-        rondas.append(cur.tolist())
+        rondas.append(cur)
     eq = ins["equipos"]
     return [[eq[i] for i in r] for r in rondas]

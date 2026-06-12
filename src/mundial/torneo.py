@@ -70,7 +70,18 @@ def cargar_insumos() -> dict:
     # mapeo de cada grupo interno (arbitrario) a su letra OFICIAL FIFA
     oficial_de_grupo = {l: geo.INFO[equipos[ms[0]]][3] for l, ms in grupos.items()}
 
-    return dict(equipos=equipos, idx=idx, att=att, deff=deff, base=dc["base"],
+    # calibracion del nivel de goles: en campo neutral el modelo subestima
+    # (~2.37 vs ~2.67 real en Mundiales). Se sube el 'base' para que el promedio
+    # de goles esperados del torneo sea GOL_TARGET (no cambia quien es favorito,
+    # solo el nivel general; las proporciones att/def se mantienen).
+    GOL_TARGET = 2.60
+    base = dc["base"]
+    pares = [p for ms in fix_por_grupo.values() for p in ms]
+    prom = float(np.mean([np.exp(base + att[ih] - deff[ia]) +
+                          np.exp(base + att[ia] - deff[ih]) for ih, ia in pares]))
+    base += float(np.log(GOL_TARGET / prom))
+
+    return dict(equipos=equipos, idx=idx, att=att, deff=deff, base=base,
                 rho=dc["rho"], elo=elo, S=float(cal["s"][0]), theta=float(cal["theta"][0]),
                 grupos=grupos, team2grupo=team2grupo, fix_por_grupo=fix_por_grupo,
                 oficial_de_grupo=oficial_de_grupo, jugados=jugados, nt=len(equipos))

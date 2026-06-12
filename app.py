@@ -264,6 +264,7 @@ CRON_CSS = """<style>
       font-weight:800;border-radius:7px;font-size:15px;}
 .t-sc.est{background:#f1f3f5;color:#909aa6;}
 .t-sc.real{background:#a01a45;color:#fff;}
+.t-scores{display:flex;gap:5px;align-items:center;}
 .card-x2{display:flex;justify-content:space-between;align-items:center;margin-top:8px;
          font-size:11px;color:#666;background:#f6f7f9;border-radius:7px;padding:5px 10px;}
 .card-x2 b{color:#222;}
@@ -280,13 +281,18 @@ def _cuando(m):
 def tarjeta_html(m, jornada):
     ih, ia = geo.info(m["home"]), geo.info(m["away"])
     j = jornada.get((m["home"], m["away"]), "")
-    est = m["apuestas"]["marcadores_top"][0]["marcador"].split("-")
-    if m["score_real"]:
-        sh, sa, cls = m["score_real"][0], m["score_real"][1], "real"
-        estado = '<span class="st-jug">Jugado</span>'
-    else:
-        sh, sa, cls = est[0], est[1], "est"
-        estado = '<span class="st-pen">Por jugar</span>'
+    eh, ea = m["apuestas"]["marcadores_top"][0]["marcador"].split("-")  # marcador estimado
+    jugado = m["score_real"] is not None
+    rh, ra = m["score_real"] if jugado else ("", "")
+    estado = '<span class="st-jug">Jugado</span>' if jugado else '<span class="st-pen">Por jugar</span>'
+
+    def cajas(est_v, real_v):
+        # en partidos jugados: estimado (gris) + real (vino); en pendientes: solo estimado
+        c = f'<span class="t-sc est" title="Estimado por el modelo">{est_v}</span>'
+        if jugado:
+            c += f'<span class="t-sc real" title="Resultado real">{real_v}</span>'
+        return f'<span class="t-scores">{c}</span>'
+
     hp = _cuando(m)
     cuando = f'{DIAS_SEM[hp.weekday()]} {hp.day} {MESES[hp.month]} &middot; {hp.strftime("%H:%M")}'
     sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
@@ -296,10 +302,10 @@ def tarjeta_html(m, jornada):
     return (f'<div class="card"><div class="card-h"><span>Grupo {ih["grupo"]} &middot; Jornada {j}</span>{estado}</div>'
             f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
             f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
-            f'<span class="t-sc {cls}">{sh}</span></div>'
+            f'{cajas(eh, rh)}</div>'
             f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
             f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
-            f'<span class="t-sc {cls}">{sa}</span></div>'
+            f'{cajas(ea, ra)}</div>'
             f'{x2}'
             f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
@@ -350,9 +356,9 @@ with tab_cron:
     if not sel:
         st.info("No hay partidos con esos filtros.")
     elif vista == "Tarjetas":
-        st.caption("El numero gris es el marcador exacto mas probable (suele ser bajo); abajo, la "
-                   "probabilidad de ganar/empatar/perder (motor Elo) muestra al favorito real. "
-                   f"{njug}/72 disputados.")
+        st.caption("Caja gris = marcador estimado por el modelo; caja vino = resultado real (en los "
+                   "jugados se ven juntos para comparar). Abajo, la probabilidad 1X2 (Elo) marca al "
+                   f"favorito real. {njug}/72 disputados.")
         html = [CRON_CSS]
         for dia, ms_iter in groupby(sel, key=lambda m: _cuando(m).date()):
             ms = list(ms_iter)

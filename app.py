@@ -303,6 +303,20 @@ def tarjeta_html(m, jornada):
             f'{x2}'
             f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
+def render_jugadas(m):
+    """Panel de mercados de apuesta de un partido (1X2, over/under, etc.)."""
+    mk = m["apuestas"]
+    estrella = mk["jugadas"][0]
+    st.markdown(f"**{m['home']}** vs **{m['away']}**")
+    st.success(f"⭐ Jugada mas segura: **{estrella['pick']}** · {estrella['prob']:.0%}")
+    for j in mk["jugadas"]:
+        st.markdown(f"{j['emoji']} {j['mercado']} — **{j['pick']}**")
+        st.progress(min(j["prob"], 1.0), text=f"{j['prob']:.0%} · {j['nivel']}")
+    tops = " · ".join(f"{t['marcador']} ({t['prob']:.0%})" for t in mk["marcadores_top"])
+    st.caption(f"🎯 Marcadores mas probables: {tops}")
+    st.caption("Mercados derivados del modelo de goles Dixon-Coles (no son cuotas reales de casas de apuesta).")
+
+
 with tab_cron:
     st.subheader("Cronograma de la fase de grupos")
     partidos_c = get_partidos()
@@ -326,6 +340,12 @@ with tab_cron:
                   if (f_eq == "Todos" or f_eq in (m["home"], m["away"]))
                   and (f_gr == "Todos" or geo.info(m["home"])["grupo"] == f_gr)), key=_cuando)
     njug = sum(1 for m in partidos_c if m["score_real"])
+
+    if sel:
+        with st.expander("🎲 Ver jugadas sugeridas de un partido"):
+            opts = {f'{geo.info(m["home"])["es"]} vs {geo.info(m["away"])["es"]}': m for m in sel}
+            eleg = st.selectbox("Partido", list(opts), key="cron_jug")
+            render_jugadas(opts[eleg])
 
     if not sel:
         st.info("No hay partidos con esos filtros.")
@@ -448,20 +468,6 @@ with tab_brk:
 
 
 # ================= FASE DE GRUPOS =================
-def render_jugadas(m):
-    """Panel de mercados de apuesta de un partido (dentro de un popover)."""
-    mk = m["apuestas"]
-    estrella = mk["jugadas"][0]
-    st.markdown(f"**{m['home']}** vs **{m['away']}**")
-    st.success(f"⭐ Jugada mas segura: **{estrella['pick']}** · {estrella['prob']:.0%}")
-    for j in mk["jugadas"]:
-        st.markdown(f"{j['emoji']} {j['mercado']} — **{j['pick']}**")
-        st.progress(min(j["prob"], 1.0), text=f"{j['prob']:.0%} · {j['nivel']}")
-    tops = " · ".join(f"{t['marcador']} ({t['prob']:.0%})" for t in mk["marcadores_top"])
-    st.caption(f"🎯 Marcadores mas probables: {tops}")
-    st.caption("Mercados derivados del modelo de goles Dixon-Coles (no son cuotas reales de casas de apuesta).")
-
-
 with tab_grp:
     st.subheader("Tabla final estimada y partidos por grupo")
     tg = get_tabla_grupos()

@@ -347,27 +347,24 @@ with tab_cron:
                   and (f_gr == "Todos" or geo.info(m["home"])["grupo"] == f_gr)), key=_cuando)
     njug = sum(1 for m in partidos_c if m["score_real"])
 
-    if sel:
-        with st.expander("🎲 Ver jugadas sugeridas de un partido"):
-            opts = {f'{geo.info(m["home"])["es"]} vs {geo.info(m["away"])["es"]}': m for m in sel}
-            eleg = st.selectbox("Partido", list(opts), key="cron_jug")
-            render_jugadas(opts[eleg])
-
     if not sel:
         st.info("No hay partidos con esos filtros.")
     elif vista == "Tarjetas":
         st.caption("Caja gris = marcador estimado por el modelo; caja vino = resultado real (en los "
                    "jugados se ven juntos para comparar). Abajo, la probabilidad 1X2 (Elo) marca al "
-                   f"favorito real. {njug}/72 disputados.")
-        html = [CRON_CSS]
+                   f"favorito real. Despliega 'Jugadas' bajo cada partido. {njug}/72 disputados.")
+        st.markdown(CRON_CSS, unsafe_allow_html=True)
         for dia, ms_iter in groupby(sel, key=lambda m: _cuando(m).date()):
             ms = list(ms_iter)
-            html.append(f'<div class="day-h">{DIAS_FULL[dia.weekday()]} {dia.day} {MESES[dia.month]} '
-                        f'<small>&middot; {len(ms)} partido{"s" if len(ms) > 1 else ""}</small></div>')
-            html.append('<div class="cards">')
-            html += [tarjeta_html(m, jornada) for m in ms]
-            html.append('</div>')
-        st.markdown("\n".join(html), unsafe_allow_html=True)
+            st.markdown(f'<div class="day-h">{DIAS_FULL[dia.weekday()]} {dia.day} {MESES[dia.month]} '
+                        f'<small>&middot; {len(ms)} partido{"s" if len(ms) > 1 else ""}</small></div>',
+                        unsafe_allow_html=True)
+            for i in range(0, len(ms), 2):  # 2 tarjetas por fila, jugadas debajo de cada una
+                for col, m in zip(st.columns(2), ms[i:i + 2]):
+                    with col:
+                        st.markdown(tarjeta_html(m, jornada), unsafe_allow_html=True)
+                        with st.expander("🎲 Jugadas sugeridas"):
+                            render_jugadas(m)
     else:
         filas = []
         for m in sel:

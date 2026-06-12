@@ -264,6 +264,9 @@ CRON_CSS = """<style>
       font-weight:800;border-radius:7px;font-size:15px;}
 .t-sc.est{background:#f1f3f5;color:#909aa6;}
 .t-sc.real{background:#a01a45;color:#fff;}
+.card-x2{display:flex;justify-content:space-between;align-items:center;margin-top:8px;
+         font-size:11px;color:#666;background:#f6f7f9;border-radius:7px;padding:5px 10px;}
+.card-x2 b{color:#222;}
 .card-f{margin-top:9px;padding-top:8px;border-top:1px solid #f1f3f5;font-size:12px;
         color:#868e96;display:flex;gap:14px;flex-wrap:wrap;}
 </style>"""
@@ -287,6 +290,9 @@ def tarjeta_html(m, jornada):
     hp = _cuando(m)
     cuando = f'{DIAS_SEM[hp.weekday()]} {hp.day} {MESES[hp.month]} &middot; {hp.strftime("%H:%M")}'
     sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
+    x2 = (f'<div class="card-x2"><span><b>{ih["cod"]}</b> gana {m["p_home"]:.0%}</span>'
+          f'<span>Empate {m["p_draw"]:.0%}</span>'
+          f'<span><b>{ia["cod"]}</b> gana {m["p_away"]:.0%}</span></div>')
     return (f'<div class="card"><div class="card-h"><span>Grupo {ih["grupo"]} &middot; Jornada {j}</span>{estado}</div>'
             f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
             f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
@@ -294,6 +300,7 @@ def tarjeta_html(m, jornada):
             f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
             f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
             f'<span class="t-sc {cls}">{sa}</span></div>'
+            f'{x2}'
             f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
 with tab_cron:
@@ -323,8 +330,9 @@ with tab_cron:
     if not sel:
         st.info("No hay partidos con esos filtros.")
     elif vista == "Tarjetas":
-        st.caption("El numero gris es el marcador estimado por el modelo; cuando se juegue, "
-                   f"aparece el resultado real en color. {njug}/72 disputados.")
+        st.caption("El numero gris es el marcador exacto mas probable (suele ser bajo); abajo, la "
+                   "probabilidad de ganar/empatar/perder (motor Elo) muestra al favorito real. "
+                   f"{njug}/72 disputados.")
         html = [CRON_CSS]
         for dia, ms_iter in groupby(sel, key=lambda m: _cuando(m).date()):
             ms = list(ms_iter)
@@ -341,16 +349,18 @@ with tab_cron:
             est = m["apuestas"]["marcadores_top"][0]["marcador"]
             real = f'{m["score_real"][0]}-{m["score_real"][1]}' if m["score_real"] else "-"
             sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
+            x2 = f'{m["p_home"]:.0%} / {m["p_draw"]:.0%} / {m["p_away"]:.0%}'
             filas.append({"": "🟢" if m["score_real"] else "⚪",
                           "Fecha": f'{DIAS_SEM[hp.weekday()]} {hp.strftime("%d/%m")}',
                           "Hora Peru": hp.strftime("%H:%M"),
                           "Gpo": geo.info(m["home"])["grupo"],
                           "Partido": f'{m["home"]} vs {m["away"]}',
-                          "Estimado": est, "Real": real, "Sede": sede})
+                          "Estimado": est, "1X2 (L/E/V)": x2, "Real": real, "Sede": sede})
         st.dataframe(pl.DataFrame(filas), hide_index=True, width="stretch",
                      column_config={"": st.column_config.TextColumn(width="small"),
                                     "Hora Peru": st.column_config.TextColumn(help="Hora de inicio en Peru (UTC-5)"),
-                                    "Estimado": st.column_config.TextColumn(help="Marcador mas probable (Dixon-Coles)"),
+                                    "Estimado": st.column_config.TextColumn(help="Marcador exacto mas probable (Dixon-Coles)"),
+                                    "1X2 (L/E/V)": st.column_config.TextColumn(help="Probabilidad de gana Local / Empate / gana Visita (Elo)"),
                                     "Real": st.column_config.TextColumn(help="Resultado real (cuando se juega)")})
         st.caption(f"🟢 jugado · ⚪ pendiente · {njug}/72 disputados. "
                    "Hora y fecha en horario de Peru (UTC-5); calendario oficial via Wikipedia.")

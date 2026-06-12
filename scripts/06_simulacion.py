@@ -1,7 +1,7 @@
 """06 - Simulacion Monte Carlo del Mundial 2026 (hasta el campeon).
 
 Usa la logica compartida en mundial.torneo (la misma que el Streamlit), que:
-  - Dixon-Coles: marcadores via Poisson -> tabla de grupos con desempate por
+  - Poisson: marcadores via Poisson -> tabla de grupos con desempate por
     diferencia y goles a favor; knockout con penales si hay empate.
   - Elo: resultado W/D/L muestreado de la calibracion ordinal.
   - FIJA los partidos de grupo YA JUGADOS con su marcador real (las predicciones

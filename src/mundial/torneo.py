@@ -105,7 +105,7 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
         for eq, d in elo_delta.items():
             i = ins["idx"][eq]
             elo[i] += d
-            att[i] += d / 250.0   # reflejar el ajuste tambien en Dixon-Coles
+            att[i] += d / 250.0   # reflejar el ajuste tambien en Poisson
             deff[i] += d / 250.0
 
     grupos, fix_por_grupo = ins["grupos"], ins["fix_por_grupo"]
@@ -247,7 +247,7 @@ def _elo_wdl(ins, i, j):
 
 
 def _gol_esperado(ins, i, j):
-    """Goles esperados de i vs j en campo neutral (Dixon-Coles)."""
+    """Goles esperados de i vs j en campo neutral (Poisson)."""
     return float(np.exp(ins["base"] + ins["att"][i] - ins["deff"][j]))
 
 

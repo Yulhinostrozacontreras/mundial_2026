@@ -1,4 +1,4 @@
-"""Streamlit - Pronostico Mundial 2026 (Dixon-Coles vs Elo + bracket + simulador).
+"""Streamlit - Pronostico Mundial 2026 (Poisson vs Elo + bracket + simulador).
 
 Correr en su propio puerto, independiente de otras apps:
     uv run streamlit run app.py --server.port 8502
@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 5
+CACHE_VER = 6
 
 
 @st.cache_resource
@@ -150,7 +150,7 @@ equipos = ins["equipos"]
 # ---------- header ----------
 st.markdown(
     '<div class="hero"><h1>🏆 MUNDIAL 2026 — Pronostico predictivo</h1>'
-    '<p>Modelo de fuerza de selecciones (Dixon-Coles + Elo) y simulacion Monte Carlo de 48 equipos. '
+    '<p>Modelo de fuerza de selecciones (Poisson + Elo) y simulacion Monte Carlo de 48 equipos. '
     'Elo es el motor mejor calibrado segun backtesting.</p></div>',
     unsafe_allow_html=True)
 
@@ -320,7 +320,7 @@ def render_jugadas(m):
         st.progress(min(j["prob"], 1.0), text=f"{j['prob']:.0%} · {j['nivel']}")
     tops = " · ".join(f"{t['marcador']} ({t['prob']:.0%})" for t in mk["marcadores_top"])
     st.caption(f"🎯 Marcadores mas probables: {tops}")
-    st.caption("Mercados derivados del modelo de goles Dixon-Coles (no son cuotas reales de casas de apuesta).")
+    st.caption("Mercados derivados del modelo de goles Poisson (no son cuotas reales de casas de apuesta).")
 
 
 with tab_cron:
@@ -382,7 +382,7 @@ with tab_cron:
         st.dataframe(pl.DataFrame(filas), hide_index=True, width="stretch",
                      column_config={"": st.column_config.TextColumn(width="small"),
                                     "Hora Peru": st.column_config.TextColumn(help="Hora de inicio en Peru (UTC-5)"),
-                                    "Estimado": st.column_config.TextColumn(help="Marcador exacto mas probable (Dixon-Coles)"),
+                                    "Estimado": st.column_config.TextColumn(help="Marcador exacto mas probable (Poisson)"),
                                     "1X2 (L/E/V)": st.column_config.TextColumn(help="Probabilidad de gana Local / Empate / gana Visita (Elo)"),
                                     "Real": st.column_config.TextColumn(help="Resultado real (cuando se juega)")})
         st.caption(f"🟢 jugado · ⚪ pendiente · {njug}/72 disputados. "
@@ -522,11 +522,11 @@ with tab_camino:
     cols = st.columns(6)
     for col, nom in zip(cols, ETAPAS_NOM):
         col.metric(ETIQ_RONDA[nom], f"{fila[nom + '_Elo']:.1%}",
-                   help=f"Dixon-Coles: {fila[nom + '_DC']:.1%}")
+                   help=f"Poisson: {fila[nom + '_DC']:.1%}")
     camino = pl.DataFrame({
         "ronda": [ETIQ_RONDA[n] for n in ETAPAS_NOM],
         "Elo": [fila[n + "_Elo"] for n in ETAPAS_NOM],
-        "Dixon-Coles": [fila[n + "_DC"] for n in ETAPAS_NOM],
+        "Poisson": [fila[n + "_DC"] for n in ETAPAS_NOM],
     }).to_pandas().melt(id_vars="ronda", var_name="motor", value_name="prob")
     orden = [ETIQ_RONDA[n] for n in ETAPAS_NOM]
     ch = (alt.Chart(camino).mark_line(point=True)
@@ -566,7 +566,7 @@ with tab_comp:
     st.subheader("Donde discrepan los motores")
     comp = base.head(12).select("equipo", "campeon_DC", "campeon_Elo").to_pandas().melt(
         id_vars="equipo", var_name="motor", value_name="prob")
-    comp["motor"] = comp["motor"].map({"campeon_DC": "Dixon-Coles", "campeon_Elo": "Elo"})
+    comp["motor"] = comp["motor"].map({"campeon_DC": "Poisson", "campeon_Elo": "Elo"})
     ch = (alt.Chart(comp).mark_bar()
           .encode(x=alt.X("prob:Q", axis=alt.Axis(format="%"), title="Prob. campeon"),
                   y=alt.Y("equipo:N", sort="-x", title=None),

@@ -1,5 +1,7 @@
-"""Modelo Dixon-Coles: Poisson bivariado con ataque/defensa por equipo,
-ventaja de localia, correccion para marcadores bajos y ponderacion temporal."""
+"""Modelo de goles Poisson (ataque/defensa por equipo, ventaja de localia y
+ponderacion temporal). Originalmente Dixon-Coles; la correccion tau para
+marcadores bajos se desactivo (rho=0) por sobreajustar en selecciones — ver
+ajustar(). Se conserva _tau() y rho en la API por compatibilidad."""
 from datetime import date
 
 import numpy as np
@@ -53,7 +55,13 @@ def _tau(hs, as_, lam, mu, rho):
 
 
 def ajustar(prep: dict, maxiter: int = 400) -> dict:
-    """Estima parametros por maxima verosimilitud ponderada."""
+    """Estima parametros por maxima verosimilitud ponderada (Poisson simple).
+
+    Se usa Poisson simple (rho=0, SIN la correccion tau de Dixon-Coles): en
+    selecciones internacionales la correccion tau no mejora y ademas sobreajusta
+    (validado out-of-sample en los Mundiales 2014/2018/2022). El dict mantiene
+    rho=0.0 por compatibilidad (apuestas/torneo lo leen y la correccion se anula).
+    """
     n = prep["n"]
     h, a, hs, as_, w = prep["h"], prep["a"], prep["hs"], prep["as_"], prep["w"]
     neut = prep["neutral"].astype(float)
@@ -61,27 +69,26 @@ def ajustar(prep: dict, maxiter: int = 400) -> dict:
     cte_a = gammaln(as_ + 1.0)
 
     def nll(p):
-        base, home, rho = p[0], p[1], p[2]
-        att = p[3:3 + n].copy()
-        deff = p[3 + n:3 + 2 * n].copy()
+        base, home = p[0], p[1]
+        att = p[2:2 + n].copy()
+        deff = p[2 + n:2 + 2 * n].copy()
         att -= att.mean()
         deff -= deff.mean()
         log_lh = base + home * (1.0 - neut) + att[h] - deff[a]
         log_la = base + att[a] - deff[h]
         lam, mu = np.exp(log_lh), np.exp(log_la)
         ll = (hs * log_lh - lam - cte_h) + (as_ * log_la - mu - cte_a)
-        ll += np.log(_tau(hs, as_, lam, mu, rho))
         return -np.sum(w * ll)
 
-    x0 = np.concatenate([[0.0, 0.25, -0.03], np.zeros(2 * n)])
-    bounds = [(None, None), (0.0, 1.0), (-0.2, 0.2)] + [(-3, 3)] * (2 * n)
+    x0 = np.concatenate([[0.0, 0.25], np.zeros(2 * n)])
+    bounds = [(None, None), (0.0, 1.0)] + [(-3, 3)] * (2 * n)
     res = minimize(nll, x0, method="L-BFGS-B", bounds=bounds,
                    options=dict(maxiter=maxiter))
 
     p = res.x
-    att = p[3:3 + n] - p[3:3 + n].mean()
-    deff = p[3 + n:3 + 2 * n] - p[3 + n:3 + 2 * n].mean()
-    return dict(base=float(p[0]), home=float(p[1]), rho=float(p[2]),
+    att = p[2:2 + n] - p[2:2 + n].mean()
+    deff = p[2 + n:2 + 2 * n] - p[2 + n:2 + 2 * n].mean()
+    return dict(base=float(p[0]), home=float(p[1]), rho=0.0,
                 att=att, deff=deff, equipos=prep["equipos"], idx=prep["idx"])
 
 

@@ -1,10 +1,10 @@
-"""Mercados de apuesta derivados del modelo de goles Dixon-Coles.
+"""Mercados de apuesta derivados del modelo de goles Poisson.
 
 A partir de los goles esperados de cada equipo se arma la matriz de marcadores
-(Poisson independiente + correccion tau de Dixon-Coles en los marcadores bajos) y
-se derivan los mercados clasicos: 1X2, doble oportunidad, over/under, ambos marcan
-y marcador exacto. Cada mercado entrega su seleccion mas probable, ordenadas de la
-jugada mas segura a la mas arriesgada.
+(Poisson independiente; la correccion tau queda anulada porque rho=0) y se derivan
+los mercados clasicos: 1X2, doble oportunidad, over/under, ambos marcan y marcador
+exacto. Cada mercado entrega su seleccion mas probable, ordenadas de la jugada mas
+segura a la mas arriesgada.
 """
 from math import factorial
 

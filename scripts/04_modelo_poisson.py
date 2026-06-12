@@ -1,4 +1,4 @@
-"""04 - Entrena Dixon-Coles sobre la ventana reciente y guarda parametros."""
+"""04 - Entrena Poisson sobre la ventana reciente y guarda parametros."""
 import _bootstrap  # noqa: F401
 import json
 from datetime import date
@@ -17,7 +17,7 @@ df = cargar_jugados()
 prep = dc.preparar(df, desde=DESDE, fecha_ref=REF, half_life_dias=730, min_partidos=20)
 print(f"Ventana {DESDE} -> {REF}: {len(prep['hs']):,} partidos, {prep['n']} equipos")
 
-print("Ajustando Dixon-Coles (MLE)...")
+print("Ajustando Poisson (MLE)...")
 modelo = dc.ajustar(prep, maxiter=500)
 print(f"  base={modelo['base']:.3f}  home_adv={modelo['home']:.3f}  rho={modelo['rho']:.3f}")
 

@@ -45,6 +45,15 @@ def cargar_insumos() -> dict:
     elo_map = dict(zip(elo_df["equipo"], elo_df["elo"]))
     elo = np.array([elo_map[e] for e in equipos])
 
+    # ajuste por VALOR DE PLANTEL (validado out-of-sample): equipos con plantel caro
+    # respecto a su Elo suben, y viceversa. 147 = w_val/w_elo*400 puntos Elo por unidad
+    # de log-valor (pesos del backtesting). Corrige casos como USA-Paraguay.
+    vp = pl.read_csv(PROC.parent / "valor_plantel_2026.csv")
+    vmap = dict(zip(vp["equipo"], vp["valor_mln"]))
+    media_lv = float(np.mean([np.log(v) for v in vmap.values()]))
+    logv = np.array([np.log(vmap.get(e, np.exp(media_lv))) for e in equipos])
+    elo = elo + 147.0 * (logv - logv.mean())
+
     grupos = {}
     for letra, sub in grupos_df.group_by("grupo", maintain_order=True):
         grupos[letra[0]] = [idx[e] for e in sub["equipo"].to_list()]
@@ -70,6 +79,18 @@ def cargar_insumos() -> dict:
     # mapeo de cada grupo interno (arbitrario) a su letra OFICIAL FIFA
     oficial_de_grupo = {l: geo.INFO[equipos[ms[0]]][3] for l, ms in grupos.items()}
 
+    # ventaja de localia para los anfitriones (USA/Mexico/Canada) en sus partidos en
+    # casa: el modelo asume campo neutral y los subestimaba (ej. USA 4-1 Paraguay).
+    # localia[(ih,ia)] = +V si el local es anfitrion en su pais, -V si lo es el visita.
+    ANFITRIONES = {"United States", "Mexico", "Canada"}
+    VENTAJA_ANFITRION = 80.0
+    localia = {}
+    for h, a, pais in fixtures.select("home_team", "away_team", "country").rows():
+        if pais == h and h in ANFITRIONES:
+            localia[(idx[h], idx[a])] = VENTAJA_ANFITRION
+        elif pais == a and a in ANFITRIONES:
+            localia[(idx[h], idx[a])] = -VENTAJA_ANFITRION
+
     # calibracion del nivel de goles: en campo neutral el modelo subestima
     # (~2.37 vs ~2.67 real en Mundiales). Se sube el 'base' para que el promedio
     # de goles esperados del torneo sea GOL_TARGET (no cambia quien es favorito,
@@ -84,7 +105,8 @@ def cargar_insumos() -> dict:
     return dict(equipos=equipos, idx=idx, att=att, deff=deff, base=base,
                 rho=dc["rho"], elo=elo, S=float(cal["s"][0]), theta=float(cal["theta"][0]),
                 grupos=grupos, team2grupo=team2grupo, fix_por_grupo=fix_por_grupo,
-                oficial_de_grupo=oficial_de_grupo, jugados=jugados, nt=len(equipos))
+                oficial_de_grupo=oficial_de_grupo, jugados=jugados, localia=localia,
+                nt=len(equipos))
 
 
 def _sig(u):
@@ -121,6 +143,7 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
 
     grupos, fix_por_grupo = ins["grupos"], ins["fix_por_grupo"]
     jugados = ins.get("jugados", {})
+    localia = ins.get("localia", {})
 
     def standings_dc():
         res = {}
@@ -154,7 +177,7 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
                     pts[:, ph] += 3 if sh > sa else (1 if sh == sa else 0)
                     pts[:, pa] += 3 if sa > sh else (1 if sh == sa else 0)
                 else:
-                    z = (elo[ih] - elo[ia]) / S
+                    z = (elo[ih] + localia.get((ih, ia), 0.0) - elo[ia]) / S
                     pH, pnl = _sig(z - theta), _sig(z + theta)
                     r = rng.random(n_sims)
                     pts[:, ph] += np.where(r < pH, 3, np.where(r < pnl, 1, 0))
@@ -252,7 +275,8 @@ def tabla_resultados(ins: dict, sim: dict) -> pl.DataFrame:
 
 # ---------- proyeccion determinista (para bracket y tablas de grupo) ----------
 def _elo_wdl(ins, i, j):
-    z = (ins["elo"][i] - ins["elo"][j]) / ins["S"]
+    bonus = ins.get("localia", {}).get((i, j), 0.0)
+    z = (ins["elo"][i] + bonus - ins["elo"][j]) / ins["S"]
     pH, pnl = _sig(z - ins["theta"]), _sig(z + ins["theta"])
     return pH, pnl - pH, 1.0 - pnl
 

@@ -53,6 +53,11 @@ def cargar_insumos() -> dict:
     media_lv = float(np.mean([np.log(v) for v in vmap.values()]))
     logv = np.array([np.log(vmap.get(e, np.exp(media_lv))) for e in equipos])
     elo = elo + 147.0 * (logv - logv.mean())
+    # propagar el valor al modelo de goles (att/deff) para que los marcadores sean
+    # coherentes con las probabilidades: equipos caros marcan mas y reciben menos.
+    # 0.28 calibrado para que la jerarquia de goles coincida con la de las prob (1X2).
+    att = att + 0.28 * (logv - logv.mean())
+    deff = deff + 0.28 * (logv - logv.mean())
 
     grupos = {}
     for letra, sub in grupos_df.group_by("grupo", maintain_order=True):
@@ -103,7 +108,8 @@ def cargar_insumos() -> dict:
     base += float(np.log(GOL_TARGET / prom))
 
     return dict(equipos=equipos, idx=idx, att=att, deff=deff, base=base,
-                rho=dc["rho"], elo=elo, S=float(cal["s"][0]), theta=float(cal["theta"][0]),
+                rho=dc["rho"], home=float(dc["home"]), elo=elo,
+                S=float(cal["s"][0]), theta=float(cal["theta"][0]),
                 grupos=grupos, team2grupo=team2grupo, fix_por_grupo=fix_por_grupo,
                 oficial_de_grupo=oficial_de_grupo, jugados=jugados, localia=localia,
                 nt=len(equipos))
@@ -144,6 +150,7 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
     grupos, fix_por_grupo = ins["grupos"], ins["fix_por_grupo"]
     jugados = ins.get("jugados", {})
     localia = ins.get("localia", {})
+    home_f = ins.get("home", 0.0)
 
     def standings_dc():
         res = {}
@@ -152,12 +159,15 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
             pts = np.zeros((n_sims, 4)); gf = np.zeros((n_sims, 4)); ga = np.zeros((n_sims, 4))
             for ih, ia in fix_por_grupo[l]:
                 ph, pa = loc[ih], loc[ia]
+                lc = localia.get((ih, ia), 0.0)  # ventaja de anfitrion local en goles
+                hb_h = home_f if lc > 0 else 0.0
+                hb_a = home_f if lc < 0 else 0.0
                 if (ih, ia) in jugados:  # marcador real fijo
                     sh, sa = jugados[(ih, ia)]
                     hg = np.full(n_sims, sh); ag = np.full(n_sims, sa)
                 else:
-                    hg = rng.poisson(np.exp(base + att[ih] - deff[ia]), n_sims)
-                    ag = rng.poisson(np.exp(base + att[ia] - deff[ih]), n_sims)
+                    hg = rng.poisson(np.minimum(np.exp(base + hb_h + att[ih] - deff[ia]), GOL_MAX), n_sims)
+                    ag = rng.poisson(np.minimum(np.exp(base + hb_a + att[ia] - deff[ih]), GOL_MAX), n_sims)
                 pts[:, ph] += np.where(hg > ag, 3, np.where(hg == ag, 1, 0))
                 pts[:, pa] += np.where(ag > hg, 3, np.where(hg == ag, 1, 0))
                 gf[:, ph] += hg; ga[:, ph] += ag; gf[:, pa] += ag; ga[:, pa] += hg
@@ -202,8 +212,8 @@ def simular(ins: dict, n_sims: int = 20000, seed: int = 20260611,
         return np.concatenate([W, R, np.take_along_axis(T, best, 1)], 1)
 
     def match_dc(A, B):
-        gA = rng.poisson(np.exp(base + att[A] - deff[B]))
-        gB = rng.poisson(np.exp(base + att[B] - deff[A]))
+        gA = rng.poisson(np.minimum(np.exp(base + att[A] - deff[B]), GOL_MAX))
+        gB = rng.poisson(np.minimum(np.exp(base + att[B] - deff[A]), GOL_MAX))
         coinA = rng.random(A.shape) < 1.0 / (1.0 + 10.0 ** (-(elo[A] - elo[B]) / 400.0))
         return np.where(gA > gB, A, np.where(gB > gA, B, np.where(coinA, A, B)))
 
@@ -281,9 +291,12 @@ def _elo_wdl(ins, i, j):
     return pH, pnl - pH, 1.0 - pnl
 
 
-def _gol_esperado(ins, i, j):
-    """Goles esperados de i vs j en campo neutral (Poisson)."""
-    return float(np.exp(ins["base"] + ins["att"][i] - ins["deff"][j]))
+GOL_MAX = 3.6  # tope realista de goles esperados por equipo (evita goleadas irreales)
+
+
+def _gol_esperado(ins, i, j, home_bonus=0.0):
+    """Goles esperados de i vs j (home_bonus = ventaja de localia si i es anfitrion)."""
+    return float(min(np.exp(ins["base"] + home_bonus + ins["att"][i] - ins["deff"][j]), GOL_MAX))
 
 
 def tabla_grupos(ins: dict) -> dict:
@@ -311,14 +324,18 @@ def partidos_grupos(ins: dict) -> list:
     idx = ins["idx"]
     jugados = ins.get("jugados", {})
     out = []
+    home_f = ins.get("home", 0.0)
     for row in fixtures.iter_rows(named=True):
         h, a = row["home_team"], row["away_team"]
         ih, ia = idx[h], idx[a]
         pH, pD, pA = _elo_wdl(ins, ih, ia)
+        lc = ins.get("localia", {}).get((ih, ia), 0.0)  # ventaja de anfitrion local
+        hb_h = home_f if lc > 0 else 0.0
+        hb_a = home_f if lc < 0 else 0.0
         out.append(dict(grupo=ins["oficial_de_grupo"][ins["team2grupo"][ih]], fecha=row["date"], home=h, away=a,
                         p_home=pH, p_draw=pD, p_away=pA,
-                        gol_home=_gol_esperado(ins, ih, ia),
-                        gol_away=_gol_esperado(ins, ia, ih),
+                        gol_home=_gol_esperado(ins, ih, ia, hb_h),
+                        gol_away=_gol_esperado(ins, ia, ih, hb_a),
                         city=row.get("city"), country=row.get("country"),
                         score_real=jugados.get((ih, ia))))
     return out

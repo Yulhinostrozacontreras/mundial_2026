@@ -7,6 +7,7 @@ import numpy as np
 import polars as pl
 
 from . import geo
+from . import forma
 
 PROC = Path(__file__).resolve().parents[2] / "data" / "processed"
 ETAPAS = {32: "avanza", 16: "R16", 8: "cuartos", 4: "semis", 2: "final", 1: "campeon"}
@@ -332,10 +333,12 @@ def partidos_grupos(ins: dict) -> list:
         lc = ins.get("localia", {}).get((ih, ia), 0.0)  # ventaja de anfitrion local
         hb_h = home_f if lc > 0 else 0.0
         hb_a = home_f if lc < 0 else 0.0
+        sg_h, sg_a, _, _ = forma.sugerencia(h, a, row["date"], row.get("country"))
         out.append(dict(grupo=ins["oficial_de_grupo"][ins["team2grupo"][ih]], fecha=row["date"], home=h, away=a,
                         p_home=pH, p_draw=pD, p_away=pA,
                         gol_home=_gol_esperado(ins, ih, ia, hb_h),
                         gol_away=_gol_esperado(ins, ia, ih, hb_a),
+                        sug_home=sg_h, sug_away=sg_a,
                         city=row.get("city"), country=row.get("country"),
                         score_real=jugados.get((ih, ia))))
     return out

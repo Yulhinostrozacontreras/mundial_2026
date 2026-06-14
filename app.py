@@ -262,6 +262,7 @@ CRON_CSS = """<style>
 .t-cod{color:#aab;font-size:12px;font-weight:700;margin-left:6px;}
 .t-sc{min-width:30px;height:30px;display:flex;align-items:center;justify-content:center;
       font-weight:800;border-radius:7px;font-size:15px;}
+.t-sc.sug{background:#ede7ff;color:#6741d9;}
 .t-sc.est{background:#f1f3f5;color:#909aa6;}
 .t-sc.real{background:#a01a45;color:#fff;}
 .t-scores{display:flex;gap:5px;align-items:center;}
@@ -282,13 +283,15 @@ def tarjeta_html(m, jornada):
     ih, ia = geo.info(m["home"]), geo.info(m["away"])
     j = jornada.get((m["home"], m["away"]), "")
     eh, ea = m["apuestas"]["marcadores_top"][0]["marcador"].split("-")  # marcador estimado
+    sh, sa = round(m["sug_home"]), round(m["sug_away"])  # sugerencia estadistica
     jugado = m["score_real"] is not None
     rh, ra = m["score_real"] if jugado else ("", "")
     estado = '<span class="st-jug">Jugado</span>' if jugado else '<span class="st-pen">Por jugar</span>'
 
-    def cajas(est_v, real_v):
-        # en partidos jugados: estimado (gris) + real (vino); en pendientes: solo estimado
-        c = f'<span class="t-sc est" title="Estimado por el modelo">{est_v}</span>'
+    def cajas(sug_v, est_v, real_v):
+        # sugerencia estadistica (morado) + estimado modelo (gris) + real (vino, si jugado)
+        c = (f'<span class="t-sc sug" title="Sugerencia estadistica (forma reciente)">{sug_v}</span>'
+             f'<span class="t-sc est" title="Estimado por el modelo">{est_v}</span>')
         if jugado:
             c += f'<span class="t-sc real" title="Resultado real">{real_v}</span>'
         return f'<span class="t-scores">{c}</span>'
@@ -302,10 +305,10 @@ def tarjeta_html(m, jornada):
     return (f'<div class="card"><div class="card-h"><span>Grupo {ih["grupo"]} &middot; Jornada {j}</span>{estado}</div>'
             f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
             f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
-            f'{cajas(eh, rh)}</div>'
+            f'{cajas(sh, eh, rh)}</div>'
             f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
             f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
-            f'{cajas(ea, ra)}</div>'
+            f'{cajas(sa, ea, ra)}</div>'
             f'{x2}'
             f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
@@ -350,9 +353,10 @@ with tab_cron:
     if not sel:
         st.info("No hay partidos con esos filtros.")
     elif vista == "Tarjetas":
-        st.caption("Caja gris = marcador estimado por el modelo; caja vino = resultado real (en los "
-                   "jugados se ven juntos para comparar). Abajo, la probabilidad 1X2 (Elo) marca al "
-                   f"favorito real. Despliega 'Jugadas' bajo cada partido. {njug}/72 disputados.")
+        st.caption("Cajas por equipo: 🟪 morado = sugerencia estadistica (forma de los ultimos 10 "
+                   "oficiales); ⬜ gris = estimado del modelo Elo+Poisson; 🟥 vino = resultado real "
+                   "(en los jugados se ven juntas para comparar). Abajo, la probabilidad 1X2 (Elo) "
+                   f"marca al favorito. Despliega 'Jugadas' bajo cada partido. {njug}/72 disputados.")
         st.markdown(CRON_CSS, unsafe_allow_html=True)
         for dia, ms_iter in groupby(sel, key=lambda m: _cuando(m).date()):
             ms = list(ms_iter)
@@ -369,6 +373,7 @@ with tab_cron:
         filas = []
         for m in sel:
             hp = _cuando(m)
+            sug = f'{round(m["sug_home"])}-{round(m["sug_away"])}'
             est = m["apuestas"]["marcadores_top"][0]["marcador"]
             real = f'{m["score_real"][0]}-{m["score_real"][1]}' if m["score_real"] else "-"
             sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
@@ -378,14 +383,17 @@ with tab_cron:
                           "Hora Peru": hp.strftime("%H:%M"),
                           "Gpo": geo.info(m["home"])["grupo"],
                           "Partido": f'{m["home"]} vs {m["away"]}',
-                          "Estimado": est, "1X2 (L/E/V)": x2, "Real": real, "Sede": sede})
+                          "Sugerido": sug, "Estimado": est, "1X2 (L/E/V)": x2,
+                          "Real": real, "Sede": sede})
         st.dataframe(pl.DataFrame(filas), hide_index=True, width="stretch",
                      column_config={"": st.column_config.TextColumn(width="small"),
                                     "Hora Peru": st.column_config.TextColumn(help="Hora de inicio en Peru (UTC-5)"),
-                                    "Estimado": st.column_config.TextColumn(help="Marcador exacto mas probable (Poisson)"),
+                                    "Sugerido": st.column_config.TextColumn(help="Sugerencia estadistica por forma reciente (ultimos 10 oficiales + valor de plantel)"),
+                                    "Estimado": st.column_config.TextColumn(help="Marcador exacto mas probable (modelo Poisson)"),
                                     "1X2 (L/E/V)": st.column_config.TextColumn(help="Probabilidad de gana Local / Empate / gana Visita (Elo)"),
                                     "Real": st.column_config.TextColumn(help="Resultado real (cuando se juega)")})
         st.caption(f"🟢 jugado · ⚪ pendiente · {njug}/72 disputados. "
+                   "Sugerido = forma reciente · Estimado = modelo. "
                    "Hora y fecha en horario de Peru (UTC-5); calendario oficial via Wikipedia.")
 
 

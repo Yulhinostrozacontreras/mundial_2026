@@ -1,7 +1,7 @@
 """04 - Entrena Poisson sobre la ventana reciente y guarda parametros."""
 import _bootstrap  # noqa: F401
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -11,11 +11,16 @@ from mundial import dixon_coles as dc
 
 PROC = Path(__file__).resolve().parents[1] / "data" / "processed"
 DESDE = date(2014, 1, 1)
-REF = date(2026, 6, 11)  # inicio del Mundial 2026
+INICIO_WC = date(2026, 6, 1)  # los partidos del Mundial 2026 reciben peso extra
+BOOST_WC = 2.0               # ~2x vs un amistoso/clasificatorio de la misma fecha
 
 df = cargar_jugados()
-prep = dc.preparar(df, desde=DESDE, fecha_ref=REF, half_life_dias=730, min_partidos=20)
-print(f"Ventana {DESDE} -> {REF}: {len(prep['hs']):,} partidos, {prep['n']} equipos")
+# ventana hasta el dia siguiente del ultimo resultado: el Poisson YA ve el Mundial
+REF = df["date"].max() + timedelta(days=1)
+prep = dc.preparar(df, desde=DESDE, fecha_ref=REF, half_life_dias=730, min_partidos=20,
+                   torneo_boost=BOOST_WC, boost_desde=INICIO_WC)
+print(f"Ventana {DESDE} -> {REF}: {len(prep['hs']):,} partidos, {prep['n']} equipos "
+      f"(Mundial 2026 con boost x{BOOST_WC})")
 
 print("Ajustando Poisson (MLE)...")
 modelo = dc.ajustar(prep, maxiter=500)

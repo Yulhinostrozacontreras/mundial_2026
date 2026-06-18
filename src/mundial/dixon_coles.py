@@ -11,8 +11,15 @@ from scipy.special import gammaln
 
 
 def preparar(df: pl.DataFrame, desde: date, fecha_ref: date,
-             half_life_dias: float = 730.0, min_partidos: int = 20):
-    """Filtra ventana de entrenamiento, mapea equipos a indices y calcula pesos."""
+             half_life_dias: float = 730.0, min_partidos: int = 20,
+             torneo_boost: float = 1.0, boost_desde: date = None,
+             boost_torneo: str = "FIFA World Cup"):
+    """Filtra ventana de entrenamiento, mapea equipos a indices y calcula pesos.
+
+    torneo_boost: multiplica el peso de los partidos del torneo en curso
+    (boost_torneo a partir de boost_desde), para que el modelo de goles reaccione
+    a la forma reciente del Mundial. 1.0 = sin boost (compatibilidad).
+    """
     d = df.filter((pl.col("date") >= desde) & (pl.col("date") < fecha_ref))
 
     # equipos con suficientes partidos en la ventana
@@ -35,6 +42,12 @@ def preparar(df: pl.DataFrame, desde: date, fecha_ref: date,
     dias = np.array([(fecha_ref - dd).days for dd in d["date"]], dtype=float)
     xi = np.log(2.0) / half_life_dias
     w = np.exp(-xi * dias)
+
+    # peso extra a los partidos del torneo en curso (forma reciente del Mundial)
+    if torneo_boost != 1.0 and boost_desde is not None:
+        es_actual = ((d["tournament"] == boost_torneo)
+                     & (d["date"] >= boost_desde)).to_numpy()
+        w = w * np.where(es_actual, torneo_boost, 1.0)
 
     return dict(equipos=equipos, idx=idx, h=h, a=a, hs=hs, as_=as_,
                 neutral=neutral, w=w, n=len(equipos))

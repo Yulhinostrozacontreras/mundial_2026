@@ -12,6 +12,24 @@ from . import forma
 PROC = Path(__file__).resolve().parents[2] / "data" / "processed"
 ETAPAS = {32: "avanza", 16: "R16", 8: "cuartos", 4: "semis", 2: "final", 1: "campeon"}
 
+_CLAUDE_CACHE: dict = {}
+
+
+def _claude_scores() -> dict:
+    """Score Claude (juicio de experto) por partido, desde data/claude_scores.csv.
+
+    {(home, away): (claude_home, claude_away, nota)}. Vacio si no existe el CSV.
+    """
+    if _CLAUDE_CACHE:
+        return _CLAUDE_CACHE
+    p = PROC.parent / "claude_scores.csv"
+    if p.exists():
+        df = pl.read_csv(p)
+        for h, a, ch, ca, n in df.select(
+                "home_team", "away_team", "claude_home", "claude_away", "nota").iter_rows():
+            _CLAUDE_CACHE[(h, a)] = (int(ch), int(ca), n)
+    return _CLAUDE_CACHE
+
 # --- Bracket OFICIAL del Mundial 2026 (estructura FIFA, letras de grupo oficiales) ---
 # Ronda de 32: cada partido es (slot, slot). slot = ('W', letra) ganador de grupo,
 # ('R', letra) segundo, ('T', k) k-esimo mejor tercero (k=0..7).
@@ -334,11 +352,15 @@ def partidos_grupos(ins: dict) -> list:
         hb_h = home_f if lc > 0 else 0.0
         hb_a = home_f if lc < 0 else 0.0
         sg_h, sg_a, _, _ = forma.sugerencia(h, a, row["date"], row.get("country"))
+        cl = _claude_scores().get((h, a))
         out.append(dict(grupo=ins["oficial_de_grupo"][ins["team2grupo"][ih]], fecha=row["date"], home=h, away=a,
                         p_home=pH, p_draw=pD, p_away=pA,
                         gol_home=_gol_esperado(ins, ih, ia, hb_h),
                         gol_away=_gol_esperado(ins, ia, ih, hb_a),
                         sug_home=sg_h, sug_away=sg_a,
+                        claude_home=cl[0] if cl else None,
+                        claude_away=cl[1] if cl else None,
+                        claude_nota=cl[2] if cl else None,
                         city=row.get("city"), country=row.get("country"),
                         score_real=jugados.get((ih, ia))))
     return out

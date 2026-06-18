@@ -264,12 +264,14 @@ CRON_CSS = """<style>
       font-weight:800;border-radius:7px;font-size:15px;}
 .t-sc.sug{background:#ede7ff;color:#6741d9;}
 .t-sc.est{background:#f1f3f5;color:#909aa6;}
+.t-sc.cla{background:#fff4e6;color:#e8590c;}
 .t-sc.real{background:#a01a45;color:#fff;}
 .t-scores{display:flex;gap:5px;align-items:center;}
 .sc-head{display:flex;justify-content:flex-end;gap:5px;margin:2px 0 4px;}
 .sc-head span{width:46px;text-align:center;font-size:8px;font-weight:800;line-height:1;
       text-transform:uppercase;letter-spacing:.2px;}
-.sc-head .h-sug{color:#6741d9;} .sc-head .h-est{color:#909aa6;} .sc-head .h-real{color:#a01a45;}
+.sc-head .h-sug{color:#6741d9;} .sc-head .h-est{color:#909aa6;}
+.sc-head .h-cla{color:#e8590c;} .sc-head .h-real{color:#a01a45;}
 .card-x2{display:flex;justify-content:space-between;align-items:center;margin-top:8px;
          font-size:11px;color:#666;background:#f6f7f9;border-radius:7px;padding:5px 10px;}
 .card-x2 b{color:#222;}
@@ -290,12 +292,17 @@ def tarjeta_html(m, jornada):
     sh, sa = round(m["sug_home"]), round(m["sug_away"])  # sugerencia estadistica
     jugado = m["score_real"] is not None
     rh, ra = m["score_real"] if jugado else ("", "")
+    tiene_cla = m.get("claude_home") is not None  # juicio de experto (Claude)
+    ch, ca = (m["claude_home"], m["claude_away"]) if tiene_cla else ("", "")
+    nota_cla = (m.get("claude_nota") or "").replace('"', "'")
     estado = '<span class="st-jug">Jugado</span>' if jugado else '<span class="st-pen">Por jugar</span>'
 
-    def cajas(sug_v, est_v, real_v):
-        # sugerencia estadistica (morado) + estimado modelo (gris) + real (vino, si jugado)
+    def cajas(sug_v, est_v, cla_v, real_v):
+        # sugerencia estadistica (morado) + estimado modelo (gris) + Claude (ambar) + real (vino)
         c = (f'<span class="t-sc sug" title="Sugerencia estadistica (forma reciente)">{sug_v}</span>'
              f'<span class="t-sc est" title="Estimado por el modelo">{est_v}</span>')
+        if tiene_cla:
+            c += f'<span class="t-sc cla" title="Score Claude: {nota_cla}">{cla_v}</span>'
         if jugado:
             c += f'<span class="t-sc real" title="Resultado real">{real_v}</span>'
         return f'<span class="t-scores">{c}</span>'
@@ -303,8 +310,9 @@ def tarjeta_html(m, jornada):
     hp = _cuando(m)
     cuando = f'{DIAS_SEM[hp.weekday()]} {hp.day} {MESES[hp.month]} &middot; {hp.strftime("%H:%M")}'
     sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
-    # etiquetas sobre las cajas de score (espejan las cajas: 2 por jugar, 3 jugado)
+    # etiquetas sobre las cajas de score (espejan las cajas mostradas)
     heads = ('<span class="h-sug">Info.Esta</span><span class="h-est">Predicho</span>'
+             + ('<span class="h-cla">Claude</span>' if tiene_cla else '')
              + ('<span class="h-real">Real</span>' if jugado else ''))
     sc_head = f'<div class="sc-head">{heads}</div>'
     x2 = (f'<div class="card-x2"><span><b>{ih["cod"]}</b> gana {m["p_home"]:.0%}</span>'
@@ -314,10 +322,10 @@ def tarjeta_html(m, jornada):
             f'{sc_head}'
             f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
             f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
-            f'{cajas(sh, eh, rh)}</div>'
+            f'{cajas(sh, eh, ch, rh)}</div>'
             f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
             f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
-            f'{cajas(sa, ea, ra)}</div>'
+            f'{cajas(sa, ea, ca, ra)}</div>'
             f'{x2}'
             f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
@@ -363,9 +371,11 @@ with tab_cron:
         st.info("No hay partidos con esos filtros.")
     elif vista == "Tarjetas":
         st.caption("Cajas por equipo (ver etiqueta arriba): 🟪 Info.Esta = sugerencia estadistica "
-                   "(forma de los ultimos 10 oficiales); ⬜ Predicho = modelo Elo+Poisson; 🟥 Real = "
-                   "resultado (en los jugados se ven juntas para comparar). Abajo, la probabilidad 1X2 "
-                   f"(Elo) marca al favorito. Despliega 'Jugadas' bajo cada partido. {njug}/72 disputados.")
+                   "(forma de los ultimos 10 oficiales); ⬜ Predicho = modelo Elo+Poisson; 🟧 Claude = "
+                   "juicio de experto (datos + contexto: lesiones, escenarios, prensa); 🟥 Real = "
+                   "resultado (en los jugados se ven juntas para comparar). Pasa el cursor sobre la caja "
+                   "Claude para ver el porque. Abajo, la probabilidad 1X2 (Elo) marca al favorito. "
+                   f"Despliega 'Jugadas' bajo cada partido. {njug}/72 disputados.")
         st.markdown(CRON_CSS, unsafe_allow_html=True)
         for dia, ms_iter in groupby(sel, key=lambda m: _cuando(m).date()):
             ms = list(ms_iter)
@@ -384,6 +394,7 @@ with tab_cron:
             hp = _cuando(m)
             sug = f'{round(m["sug_home"])}-{round(m["sug_away"])}'
             est = m["apuestas"]["marcadores_top"][0]["marcador"]
+            cla = f'{m["claude_home"]}-{m["claude_away"]}' if m.get("claude_home") is not None else "-"
             real = f'{m["score_real"][0]}-{m["score_real"][1]}' if m["score_real"] else "-"
             sede = ", ".join(x for x in (m["city"], m["country"]) if x) or "-"
             x2 = f'{m["p_home"]:.0%} / {m["p_draw"]:.0%} / {m["p_away"]:.0%}'
@@ -392,17 +403,18 @@ with tab_cron:
                           "Hora Peru": hp.strftime("%H:%M"),
                           "Gpo": geo.info(m["home"])["grupo"],
                           "Partido": f'{m["home"]} vs {m["away"]}',
-                          "Info.Esta": sug, "Predicho": est, "1X2 (L/E/V)": x2,
+                          "Info.Esta": sug, "Predicho": est, "Claude": cla, "1X2 (L/E/V)": x2,
                           "Real": real, "Sede": sede})
         st.dataframe(pl.DataFrame(filas), hide_index=True, width="stretch",
                      column_config={"": st.column_config.TextColumn(width="small"),
                                     "Hora Peru": st.column_config.TextColumn(help="Hora de inicio en Peru (UTC-5)"),
                                     "Info.Esta": st.column_config.TextColumn(help="Informacion estadistica: sugerencia por forma reciente (ultimos 10 oficiales + valor de plantel)"),
                                     "Predicho": st.column_config.TextColumn(help="Marcador exacto mas probable (modelo Poisson)"),
+                                    "Claude": st.column_config.TextColumn(help="Score Claude: juicio de experto (datos + contexto cualitativo: lesiones, escenarios de clasificacion, prensa). Libre para diferir del modelo"),
                                     "1X2 (L/E/V)": st.column_config.TextColumn(help="Probabilidad de gana Local / Empate / gana Visita (Elo)"),
                                     "Real": st.column_config.TextColumn(help="Resultado real (cuando se juega)")})
         st.caption(f"🟢 jugado · ⚪ pendiente · {njug}/72 disputados. "
-                   "Info.Esta = forma reciente · Predicho = modelo · Real = resultado. "
+                   "Info.Esta = forma reciente · Predicho = modelo · Claude = juicio de experto · Real = resultado. "
                    "Hora y fecha en horario de Peru (UTC-5); calendario oficial via Wikipedia.")
 
 

@@ -1,45 +1,25 @@
 home_team,away_team,claude_home,claude_away,nota
-Scotland,Morocco,1,2,Marruecos clase mundial pese al 1-1; Escocia sorprendio pero es inferior
-Brazil,Haiti,2,0,DIFIERE: Brasil gana pero SIN Neymar/Rodrygo/Militao/Estevao no golea como cree el modelo
-United States,Australia,2,1,USA anfitrion en forma; Pulisic en duda; Australia dura
-Turkey,Paraguay,1,1,DIFIERE: ambos perdieron y se la juegan; duelo mas parejo de lo que da el modelo
-Germany,Ivory Coast,2,1,Alemania con confianza tras 7-1; Costa de Marfil fisica gano su debut
-Ecuador,Curaçao,3,0,Ecuador muy superior y obligado; Curacao ya encajo 7
-Netherlands,Sweden,2,1,Choque de lideres; Suecia pego 5-1 pero Oranje tiene mas plantel
-Tunisia,Japan,0,2,Japon clase asiatica; Tunez goleado 1-5
-Belgium,Iran,2,1,Belgica plantel; Iran ordenado empato su debut
-New Zealand,Egypt,1,1,Egipto con Salah algo superior pero NZ compite; reparto
-Spain,Saudi Arabia,3,0,Espana obligada a golear tras el 0-0; Yamal disponible; Arabia goleable
-Uruguay,Cape Verde,2,0,Uruguay clase sudamericana; Cabo Verde se atrinchera pero cede
-France,Iraq,3,0,Francia plantel brutal con Saliba ok; Irak muy inferior
-Norway,Senegal,2,1,Noruega-Haaland en racha (4-1); Senegal fisico pero perdio; duelo por el liderato
-Argentina,Austria,2,0,"Argentina campeona solida, Otamendi vuelve; Austria gano pero es inferior"
-Jordan,Algeria,0,2,Argelia muy superior pese al 0-3 con Argentina; obligada a ganar
-Portugal,Uzbekistan,3,0,Portugal golea para asegurar primer puesto
-Colombia,DR Congo,2,0,"Colombia clase, cierra como lider"
-England,Ghana,2,0,Inglaterra superior y enchufada
-Panama,Croatia,0,2,Croacia clase y oficio
-Mexico,Czech Republic,2,1,Mexico anfitrion; Chequia jugandose la vida arriesga
-South Africa,South Korea,0,2,Corea superior; SA probablemente ya eliminado
-Canada,Switzerland,1,1,DIFIERE: duelo directo por clasificar; reparto plausible
-Bosnia and Herzegovina,Qatar,2,1,Bosnia obligada; Qatar flojo defensivamente
-Scotland,Brazil,0,2,Brasil con bajas pero superior; Escocia se la juega y se expone
-Morocco,Haiti,3,0,Marruecos golea a un Haiti eliminado
-United States,Turkey,2,1,USA anfitrion cierra fuerte en casa
-Paraguay,Australia,1,1,Ambos jugandose el pase; duelo parejo y tenso
-Curaçao,Ivory Coast,0,3,Costa de Marfil muy superior ante el colista
-Ecuador,Germany,1,1,DIFIERE: Ecuador solido atras; Alemania ya clasificada puede rotar
-Japan,Sweden,1,1,"Choque por el liderato; dos equipos en forma, reparto"
-Tunisia,Netherlands,0,2,Paises Bajos superior cierra primero
-Egypt,Iran,1,1,Parejo y ambos jugandose el pase
-New Zealand,Belgium,0,2,Belgica superior sentencia
-Cape Verde,Saudi Arabia,1,1,Duelo parejo entre dos que pelean el tercer puesto
-Uruguay,Spain,1,2,Espana clase y necesita el primer puesto; Uruguay vende cara la derrota
-Norway,France,1,2,DIFIERE menos: Francia superior pero Noruega-Haaland en casa incomoda; duelo por liderato
-Senegal,Iraq,2,0,Senegal superior y obligado a ganar
-Algeria,Austria,1,1,Austria quiza ya clasificada; Argelia empuja; reparto
-Jordan,Argentina,0,3,Argentina golea pese a posible rotacion; Jordan eliminado
-Colombia,Portugal,1,1,"Choque de lideres por el primer puesto, ambos quiza clasificados; reparto"
-DR Congo,Uzbekistan,1,1,Dos selecciones probablemente eliminadas; duelo plano
-Panama,England,0,3,Inglaterra golea para cerrar como lider
-Croatia,Ghana,2,0,Croacia clase cierra su grupo
+Mexico,Czech Republic,2,1,Mexico ya clasificado y lider; rota algo pero la localia del Azteca pesa; Chequia (1pt) obligada se expone
+South Africa,South Korea,1,2,Corea (3pts) avanza con un punto y es superior; Sudafrica (1pt) necesita ganar pero no le alcanza el plantel
+Canada,Switzerland,1,1,Duelo por el 1er puesto; a ambos (4pts) un empate los deja comodos rumbo a octavos; reparto plausible
+Bosnia and Herzegovina,Qatar,2,0,"Bosnia (1pt) obligada y con Dzeko marca; Qatar (1pt, DG-6) ya goleado y sin opciones"
+Scotland,Brazil,1,2,DIFIERE: Brasil DIEZMADO (Neymar/Rodrygo/Estevao fuera) no golea pero su oficio alcanza; Escocia obligada arriesga y se expone
+Morocco,Haiti,2,0,Marruecos (4pts) gana y asegura el grupo; Haiti (0pts) ya eliminado
+United States,Turkey,2,1,USA ya clasificado y anfitrion cierra en casa aun rotando; Turquia (0pts) eliminada descuenta
+Paraguay,Australia,1,1,DIFIERE: final por el 2do puesto (ambos 3pts); el empate deja a los dos vivos como terceros; duelo tenso y parejo
+Curaçao,Ivory Coast,0,2,"Costa de Marfil (3pts) gana y clasifica; Curacao (1pt, DG-6) colista ya casi sin opciones"
+Ecuador,Germany,1,1,DIFIERE: Alemania ya clasificada como lider ROTA (sin Schlotterbeck); Ecuador solido atras araña el punto que pelea por tercero
+Japan,Sweden,2,1,Choque por el liderato entre dos goleadores; Japon (4pts) en forma se impone; Suecia (3pts) cae a pelear tercero
+Tunisia,Netherlands,0,2,"Paises Bajos (4pts) cierra arriba aun sin Timber; Tunez (0pts, DG-8) eliminado y goleado"
+Egypt,Iran,1,1,Grupo apretado: a Egipto (4pts) con Salah el empate le basta para avanzar; Iran (2pts) empuja y se reparten
+New Zealand,Belgium,1,2,Belgica (2pts) OBLIGADA a ganar para no firmar un fracaso; NZ (1pt) pelea pero el plantel belga resuelve
+Cape Verde,Saudi Arabia,1,0,"Final por el tercer puesto; Cabo Verde (2pts) se atrinchera y golpea; Arabia (1pt, DG-4) necesitaba mas"
+Uruguay,Spain,1,2,Espana (4pts) con Yamal apto va por el 1er puesto y su clase pesa; Uruguay (2pts) vende cara su ultima opcion
+Norway,France,1,2,Ambos ya clasificados: duelo por el 1er puesto (Haaland vs Mbappe); Francia tiene mas plantel y se queda el grupo
+Senegal,Iraq,2,0,Ambos eliminados (0pts) juegan por orgullo; Senegal es muy superior
+Algeria,Austria,1,1,"DIFIERE: final por el 2do puesto (ambos 3pts); duelo tenso, el empate los deja a ambos peleando como terceros"
+Jordan,Argentina,0,2,Argentina ya clasificada ROTA (Messi puede descansar); gana con comodidad sin golear; Jordania (0pts) eliminada
+Colombia,Portugal,1,1,Choque por el 1er puesto entre dos ya practicamente clasificados; ambos pueden especular; reparto plausible
+DR Congo,Uzbekistan,1,0,"DR Congo (1pt) mantiene una minima chance de tercero y gana ajustado; Uzbekistan (0pts, DG-7) eliminado"
+Panama,England,0,2,Inglaterra (4pts) cierra como lider; Panama (0pts) ya eliminado
+Croatia,Ghana,2,1,Croacia (3pts) OBLIGADA a ganar saca su clase y oficio; Ghana (4pts) avanzaba con el empate pero cae; Modric manda

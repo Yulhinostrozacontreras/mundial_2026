@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 13
+CACHE_VER = 14
 
 
 @st.cache_resource
@@ -362,6 +362,9 @@ def tarjeta_16avos_html(m):
              + ('<span class="h-cla">Claude</span>' if tiene_cla else ''))
     x2 = (f'<div class="card-x2"><span><b>{ih["cod"]}</b> avanza {m["p_home"]:.0%}</span>'
           f'<span><b>{ia["cod"]}</b> avanza {m["p_away"]:.0%}</span></div>')
+    d = m["fecha_peru"]
+    cuando = f'{DIAS_SEM[d.weekday()]} {d.day} {MESES[d.month]} &middot; {d.strftime("%H:%M")} (Peru)'
+    footer = f'<div class="card-f"><span>&#128336; {cuando}</span><span>&#128205; {m["sede"]}</span></div>'
     return (f'<div class="card"><div class="card-h"><span>16avos de final</span>{estado}</div>'
             f'<div class="sc-head">{heads}</div>'
             f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
@@ -370,7 +373,7 @@ def tarjeta_16avos_html(m):
             f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
             f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
             f'{cajas(sa, ea, ca)}</div>'
-            f'{x2}</div>')
+            f'{x2}{footer}</div>')
 
 
 def render_jugadas(m):
@@ -567,10 +570,10 @@ with tab_brk:
     st.divider()
     st.subheader("🔢 16avos: info estadistica, prediccion y Claude")
     m16, _ = get_16avos()
-    st.caption("Igual que la fase de grupos: 🟪 Info.Esta (forma de los ultimos 10 oficiales) · "
-               "⬜ Predicho (modelo Elo+Poisson) · 🟧 Claude (juicio de experto; pasa el cursor sobre "
-               "la caja para ver el porque). Abajo, la probabilidad de AVANZAR a 8vos (Elo, incluye "
-               "el desempate por penales).")
+    st.caption("Ordenados por fecha de juego (hora de Peru). Igual que la fase de grupos: "
+               "🟪 Info.Esta (forma de los ultimos 10 oficiales) · ⬜ Predicho (modelo Elo+Poisson) · "
+               "🟧 Claude (juicio de experto; pasa el cursor sobre la caja para ver el porque). Abajo, "
+               "la probabilidad de AVANZAR a 8vos (Elo, incluye el desempate por penales).")
     st.markdown(CRON_CSS, unsafe_allow_html=True)
     for i in range(0, len(m16), 2):
         for col, m in zip(st.columns(2), m16[i:i + 2]):

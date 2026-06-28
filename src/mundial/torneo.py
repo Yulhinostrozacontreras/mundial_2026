@@ -507,6 +507,35 @@ def bracket_real_arbol(ins: dict):
 
 _CLA16_CACHE: dict = {}
 
+# Calendario OFICIAL de 16avos (Round of 32). El indice i corresponde a
+# R32_BRACKET[i] = Match (73+i). (fecha, hora_local, offset_utc, sede). Fuente:
+# calendario FIFA / Wikipedia 2026 FIFA World Cup knockout stage.
+_FECHAS_R32 = [
+    ("2026-06-28", "12:00", -7, "SoFi Stadium, Los Angeles"),
+    ("2026-06-29", "16:30", -4, "Gillette Stadium, Boston"),
+    ("2026-06-29", "19:00", -6, "Estadio BBVA, Monterrey"),
+    ("2026-06-29", "12:00", -5, "NRG Stadium, Houston"),
+    ("2026-06-30", "17:00", -4, "MetLife Stadium, Nueva York"),
+    ("2026-06-30", "12:00", -5, "AT&T Stadium, Dallas"),
+    ("2026-06-30", "19:00", -6, "Estadio Azteca, Ciudad de Mexico"),
+    ("2026-07-01", "12:00", -4, "Mercedes-Benz Stadium, Atlanta"),
+    ("2026-07-01", "13:00", -7, "Levi's Stadium, San Francisco"),
+    ("2026-07-01", "13:00", -7, "Lumen Field, Seattle"),
+    ("2026-07-02", "19:00", -4, "BMO Field, Toronto"),
+    ("2026-07-02", "12:00", -7, "SoFi Stadium, Los Angeles"),
+    ("2026-07-02", "20:00", -7, "BC Place, Vancouver"),
+    ("2026-07-03", "18:00", -4, "Hard Rock Stadium, Miami"),
+    ("2026-07-03", "20:30", -5, "Arrowhead Stadium, Kansas City"),
+    ("2026-07-03", "13:00", -5, "AT&T Stadium, Dallas"),
+]
+
+
+def _peru_dt(fecha: str, hora: str, off: int):
+    """Convierte la hora local de la sede (offset UTC) a hora de Peru (UTC-5)."""
+    import datetime as _dt
+    loc = _dt.datetime.strptime(f"{fecha} {hora}", "%Y-%m-%d %H:%M")
+    return loc - _dt.timedelta(hours=off) - _dt.timedelta(hours=5)
+
 
 def _claude_16avos() -> dict:
     """Score Claude para 16avos, desde data/claude_16avos.csv. {(home,away):(ch,ca,nota)}."""
@@ -536,7 +565,9 @@ def partidos_16avos(ins: dict):
     cla = _claude_16avos()
     fref = _dt.date(2026, 6, 30)  # tras los grupos: forma sobre lo ya jugado
     out = []
-    for _, a, b in llaves:
+    for j, (_, a, b) in enumerate(llaves):
+        midx = _LAYOUT_R32[j]  # llave j en pantalla = R32_BRACKET[midx] = Match 73+midx
+        fecha, hora, off, sede = _FECHAS_R32[midx]
         pa = 1.0 / (1.0 + 10.0 ** (-(elo[a] - elo[b]) / 400.0))
         sh, sa, _, _ = forma.sugerencia(eq[a], eq[b], fref)
         cl = cla.get((eq[a], eq[b]))
@@ -545,6 +576,8 @@ def partidos_16avos(ins: dict):
             gol_home=_gol_esperado(ins, a, b), gol_away=_gol_esperado(ins, b, a),
             sug_home=sh, sug_away=sa,
             claude_home=cl[0] if cl else None, claude_away=cl[1] if cl else None,
-            claude_nota=cl[2] if cl else None,
+            claude_nota=cl[2] if cl else None, sede=sede,
+            fecha_peru=_peru_dt(fecha, hora, off),
             ganador=(eq[ko[frozenset({a, b})]] if frozenset({a, b}) in ko else None)))
+    out.sort(key=lambda m: m["fecha_peru"])
     return out, n_completos

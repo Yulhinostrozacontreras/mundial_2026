@@ -397,3 +397,64 @@ def bracket_proyectado(ins: dict) -> list:
         rondas.append(cur)
     eq = ins["equipos"]
     return [[eq[i] for i in r] for r in rondas]
+
+
+def _standings_reales(ins: dict):
+    """Posiciones REALES por grupo a partir de los partidos ya jugados.
+
+    Devuelve (tabla, n_completos) donde tabla[letra_oficial] = lista ordenada de
+    (idx, pts, dg, gf, pj) por puntos/dif.goles/goles a favor (criterio FIFA,
+    sin head-to-head). n_completos = cuantos grupos tienen sus 3 fechas jugadas.
+    """
+    jug = ins.get("jugados", {})
+    og = ins["oficial_de_grupo"]
+    tabla, n_completos = {}, 0
+    for l, ms in ins["grupos"].items():
+        ac = {t: [0, 0, 0, 0] for t in ms}  # pts, gf, ga, pj
+        for ih, ia in ins["fix_por_grupo"][l]:
+            if (ih, ia) not in jug:
+                continue
+            sh, sa = jug[(ih, ia)]
+            ac[ih][3] += 1; ac[ia][3] += 1
+            ac[ih][1] += sh; ac[ih][2] += sa
+            ac[ia][1] += sa; ac[ia][2] += sh
+            if sh > sa:   ac[ih][0] += 3
+            elif sh < sa: ac[ia][0] += 3
+            else:         ac[ih][0] += 1; ac[ia][0] += 1
+        filas = sorted(((t, ac[t][0], ac[t][1] - ac[t][2], ac[t][1], ac[t][3]) for t in ms),
+                       key=lambda x: (-x[1], -x[2], -x[3]))
+        tabla[og[l]] = filas
+        if all(f[4] == 3 for f in filas):
+            n_completos += 1
+    return tabla, n_completos
+
+
+def bracket_real_r32(ins: dict):
+    """Las 16 llaves REALES de 16avos segun los resultados ya jugados de grupos.
+
+    Devuelve (llaves, n_completos) con llaves = lista de 16 tuplas
+    (etiqueta_slot, idxA, idxB) en orden de layout del bracket. Los 8 mejores
+    terceros se asignan por ranking (misma aproximacion que bracket_proyectado).
+    Mientras haya grupos sin cerrar, las posiciones de esos grupos son
+    provisionales (con lo jugado hasta el momento).
+    """
+    tabla, n_completos = _standings_reales(ins)
+    W = {g: tabla[g][0][0] for g in tabla}
+    R = {g: tabla[g][1][0] for g in tabla}
+    terceros = sorted(((g, tabla[g][2]) for g in tabla),
+                      key=lambda x: (-x[1][1], -x[1][2], -x[1][3]))
+    best8 = {k: terceros[k][1][0] for k in range(8)}
+
+    def slot(s):
+        tipo, key = s
+        return W[key] if tipo == "W" else (R[key] if tipo == "R" else best8[key])
+
+    def lab(s):
+        tipo, key = s
+        return f"1{key}" if tipo == "W" else (f"2{key}" if tipo == "R" else "Mejor 3o")
+
+    llaves = []
+    for i in _LAYOUT_R32:
+        s1, s2 = R32_BRACKET[i]
+        llaves.append((f"{lab(s1)} - {lab(s2)}", slot(s1), slot(s2)))
+    return llaves, n_completos

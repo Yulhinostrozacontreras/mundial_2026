@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 9
+CACHE_VER = 10
 
 
 @st.cache_resource
@@ -78,6 +78,14 @@ def get_sim(n_sims: int, seed: int, delta_items: tuple, ver: int = CACHE_VER):
 @st.cache_data
 def get_bracket(ver: int = CACHE_VER):
     return torneo.bracket_proyectado(get_insumos(CACHE_VER))
+
+
+@st.cache_data
+def get_bracket_real(ver: int = CACHE_VER):
+    ins = get_insumos(CACHE_VER)
+    llaves, ncomp = torneo.bracket_real_r32(ins)
+    eq = ins["equipos"]
+    return [(lab, eq[a], eq[b]) for lab, a, b in llaves], ncomp
 
 
 @st.cache_data
@@ -450,8 +458,9 @@ def render_bracket(rondas):
     champ = rondas[5][0]
 
     def box(name, cls=""):
+        es = geo.info(name)["es"] if name in geo.INFO else name
         ch_mark = " ★" if cls == "champ" else ""
-        return f'<div class="bx {cls}">{name}{ch_mark}</div>'
+        return f'<div class="bx {cls}">{es}{ch_mark}</div>'
 
     def col(label, teams, cls=""):
         cajas = "".join(box(t, cls) for t in teams)
@@ -486,6 +495,29 @@ def render_bracket(rondas):
     return css + f'<div class="scroll"><div class="wrap">{left}{center}{right}</div></div>'
 
 
+def render_llaves_reales(llaves):
+    """Las 16 llaves REALES de 16avos (resultados de grupos), en español."""
+    def card(lab, a, b):
+        ia, ib = geo.info(a), geo.info(b)
+        na = f'{ia["bandera"]} {ia["es"]}' if a in geo.INFO else a
+        nb = f'{ib["es"]} {ib["bandera"]}' if b in geo.INFO else b
+        return (f'<div class="lk"><div class="lk-lab">{lab}</div>'
+                f'<div class="lk-row"><span class="lk-a">{na}</span>'
+                f'<span class="lk-vs">vs</span><span class="lk-b">{nb}</span></div></div>')
+    cards = "".join(card(*lk) for lk in llaves)
+    css = """<style>
+    .lkwrap{background:linear-gradient(135deg,#0d4d3a,#08321f);padding:12px;border-radius:12px;
+            display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+    @media(max-width:640px){.lkwrap{grid-template-columns:1fr;}}
+    .lk{background:#fff;border-radius:6px;padding:5px 8px;box-shadow:0 1px 2px rgba(0,0,0,.2);}
+    .lk-lab{color:#0d7a55;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;}
+    .lk-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;color:#222;}
+    .lk-a{text-align:left;flex:1;}.lk-b{text-align:right;flex:1;}
+    .lk-vs{color:#999;font-size:9px;font-weight:700;margin:0 6px;}
+    </style>"""
+    return css + f'<div class="lkwrap">{cards}</div>'
+
+
 with tab_brk:
     st.subheader("Cronograma proyectado — ruta mas probable")
     st.caption("Bracket determinista: en cada llave avanza el equipo de mayor fuerza (Elo). "
@@ -497,6 +529,20 @@ with tab_brk:
     st.success(f"**Final proyectada:** {fin[0]}  vs  {fin[1]}   →   Campeon: **{rondas[5][0]}**")
     st.caption("Estructura oficial FIFA de la ronda de 32 al titulo. Los 8 mejores terceros se "
                "asignan por ranking (aproximacion de la tabla oficial de combinaciones).")
+
+    st.divider()
+    st.subheader("🆚 Llaves REALES de 16avos — segun resultados de grupos")
+    llaves_reales, n_completos = get_bracket_real()
+    if n_completos == 12:
+        st.caption("Fase de grupos CERRADA: estos son los 16 cruces reales de 16avos.")
+    else:
+        st.warning(f"Fase de grupos en curso ({n_completos}/12 grupos cerrados). "
+                   "Las llaves de los grupos sin cerrar son PROVISIONALES (con lo jugado "
+                   "hasta ahora) y se completaran solas cuando el cron traiga los resultados de hoy.")
+    st.iframe(render_llaves_reales(llaves_reales), height=560)
+    st.caption("Arriba: cuadro PROYECTADO por el modelo (ruta probable). Aqui: emparejamientos "
+               "que efectivamente salieron de la fase de grupos. Los mejores terceros se asignan "
+               "por ranking (aproximacion de la tabla oficial FIFA).")
 
 
 # ================= FASE DE GRUPOS =================

@@ -458,3 +458,48 @@ def bracket_real_r32(ins: dict):
         s1, s2 = R32_BRACKET[i]
         llaves.append((f"{lab(s1)} - {lab(s2)}", slot(s1), slot(s2)))
     return llaves, n_completos
+
+
+def _ko_resultados(ins: dict) -> dict:
+    """Ganadores REALES de los partidos de eliminatoria ya jugados (los WC
+    jugados que NO son de la fase de grupos). {frozenset({i,j}): idx_ganador}.
+    Empates (definidos por penales, sin dato de marcador) quedan sin resolver."""
+    idx = ins["idx"]
+    fixtures = pl.read_parquet(PROC / "fixtures_2026.parquet")
+    grupos_set = set(fixtures.select("home_team", "away_team").rows())
+    partidos = pl.read_parquet(PROC / "partidos.parquet")
+    wc = partidos.filter((pl.col("tournament") == "FIFA World Cup")
+                         & (pl.col("date") >= pl.date(2026, 6, 1))
+                         & pl.col("home_score").is_not_null())
+    ko = {}
+    for h, a, hs, as_ in wc.select("home_team", "away_team", "home_score", "away_score").rows():
+        if (h, a) in grupos_set or h not in idx or a not in idx:
+            continue
+        if hs > as_:
+            ko[frozenset({idx[h], idx[a]})] = idx[h]
+        elif as_ > hs:
+            ko[frozenset({idx[h], idx[a]})] = idx[a]
+    return ko
+
+
+def bracket_real_arbol(ins: dict):
+    """El bracket REAL en formato arbol (mismas rondas que bracket_proyectado).
+
+    Devuelve ([R32(32), R16(16), QF(8), SF(4), F(2), campeon(1)], n_completos)
+    con NOMBRES; las celdas aun no definidas (eliminatorias sin jugar) van como
+    cadena vacia "". Los 16avos salen de los resultados de grupos; las rondas
+    siguientes se llenan con los ganadores reales conforme se jueguen.
+    """
+    llaves, n_completos = bracket_real_r32(ins)
+    eq = ins["equipos"]
+    ko = _ko_resultados(ins)
+    cur = [t for _, a, b in llaves for t in (a, b)]  # 32 idx en orden de layout
+    rondas = [cur]
+    while len(cur) > 1:
+        nxt = []
+        for k in range(0, len(cur), 2):
+            x, y = cur[k], cur[k + 1]
+            nxt.append(ko.get(frozenset({x, y})) if (x is not None and y is not None) else None)
+        cur = nxt
+        rondas.append(cur)
+    return [[eq[i] if i is not None else "" for i in r] for r in rondas], n_completos

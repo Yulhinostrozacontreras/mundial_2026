@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 10
+CACHE_VER = 11
 
 
 @st.cache_resource
@@ -82,10 +82,7 @@ def get_bracket(ver: int = CACHE_VER):
 
 @st.cache_data
 def get_bracket_real(ver: int = CACHE_VER):
-    ins = get_insumos(CACHE_VER)
-    llaves, ncomp = torneo.bracket_real_r32(ins)
-    eq = ins["equipos"]
-    return [(lab, eq[a], eq[b]) for lab, a, b in llaves], ncomp
+    return torneo.bracket_real_arbol(get_insumos(CACHE_VER))
 
 
 @st.cache_data
@@ -453,11 +450,13 @@ with tab_pron:
 
 
 # ================= BRACKET =================
-def render_bracket(rondas):
+def render_bracket(rondas, grad="#a01a45,#5c0d28"):
     r32, r16, qf, sf, fin = rondas[0], rondas[1], rondas[2], rondas[3], rondas[4]
     champ = rondas[5][0]
 
     def box(name, cls=""):
+        if not name:
+            return '<div class="bx empty"></div>'
         es = geo.info(name)["es"] if name in geo.INFO else name
         ch_mark = " ★" if cls == "champ" else ""
         return f'<div class="bx {cls}">{es}{ch_mark}</div>'
@@ -478,7 +477,7 @@ def render_bracket(rondas):
     *{box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;}
     html,body{margin:0;padding:0;}
     .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;padding-bottom:8px;}
-    .wrap{background:linear-gradient(135deg,#a01a45,#5c0d28);padding:14px;border-radius:12px;
+    .wrap{background:linear-gradient(135deg,__GRAD__);padding:14px;border-radius:12px;
           display:flex;justify-content:flex-start;gap:4px;min-width:760px;}
     .col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:84px;}
     .lbl{color:#ffd9e4;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:6px;letter-spacing:.5px;}
@@ -489,33 +488,14 @@ def render_bracket(rondas):
     .bx.fin{font-size:12px;padding:7px;border-left-color:#3b5bdb;font-weight:800;width:130px;margin:6px 0;}
     .bx.champ{background:linear-gradient(135deg,#ffe07a,#f1b305);border-left-color:#c98a00;
               font-size:13px;font-weight:800;padding:8px;width:140px;color:#5a3d00;}
+    .bx.empty{background:rgba(255,255,255,.18);border:1px dashed rgba(255,255,255,.55);
+              border-left:1px dashed rgba(255,255,255,.55);min-height:17px;box-shadow:none;}
+    .bx.fin.empty{width:130px;min-height:26px;}.bx.champ.empty{width:140px;min-height:28px;}
     .center{justify-content:center;flex:1.3;}
     .cup{font-size:30px;margin:6px 0;}
     </style>"""
+    css = css.replace("__GRAD__", grad)
     return css + f'<div class="scroll"><div class="wrap">{left}{center}{right}</div></div>'
-
-
-def render_llaves_reales(llaves):
-    """Las 16 llaves REALES de 16avos (resultados de grupos), en español."""
-    def card(lab, a, b):
-        ia, ib = geo.info(a), geo.info(b)
-        na = f'{ia["bandera"]} {ia["es"]}' if a in geo.INFO else a
-        nb = f'{ib["es"]} {ib["bandera"]}' if b in geo.INFO else b
-        return (f'<div class="lk"><div class="lk-lab">{lab}</div>'
-                f'<div class="lk-row"><span class="lk-a">{na}</span>'
-                f'<span class="lk-vs">vs</span><span class="lk-b">{nb}</span></div></div>')
-    cards = "".join(card(*lk) for lk in llaves)
-    css = """<style>
-    .lkwrap{background:linear-gradient(135deg,#0d4d3a,#08321f);padding:12px;border-radius:12px;
-            display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
-    @media(max-width:640px){.lkwrap{grid-template-columns:1fr;}}
-    .lk{background:#fff;border-radius:6px;padding:5px 8px;box-shadow:0 1px 2px rgba(0,0,0,.2);}
-    .lk-lab{color:#0d7a55;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;}
-    .lk-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;color:#222;}
-    .lk-a{text-align:left;flex:1;}.lk-b{text-align:right;flex:1;}
-    .lk-vs{color:#999;font-size:9px;font-weight:700;margin:0 6px;}
-    </style>"""
-    return css + f'<div class="lkwrap">{cards}</div>'
 
 
 with tab_brk:
@@ -531,18 +511,19 @@ with tab_brk:
                "asignan por ranking (aproximacion de la tabla oficial de combinaciones).")
 
     st.divider()
-    st.subheader("🆚 Llaves REALES de 16avos — segun resultados de grupos")
-    llaves_reales, n_completos = get_bracket_real()
+    st.subheader("🆚 Bracket REAL — resultados que van saliendo")
+    rondas_reales, n_completos = get_bracket_real()
     if n_completos == 12:
-        st.caption("Fase de grupos CERRADA: estos son los 16 cruces reales de 16avos.")
+        st.caption("Fase de grupos CERRADA: los 16avos son los cruces reales. Las rondas "
+                   "siguientes se llenan solas a medida que se juegan las eliminatorias.")
     else:
-        st.warning(f"Fase de grupos en curso ({n_completos}/12 grupos cerrados). "
-                   "Las llaves de los grupos sin cerrar son PROVISIONALES (con lo jugado "
-                   "hasta ahora) y se completaran solas cuando el cron traiga los resultados de hoy.")
-    st.iframe(render_llaves_reales(llaves_reales), height=560)
-    st.caption("Arriba: cuadro PROYECTADO por el modelo (ruta probable). Aqui: emparejamientos "
-               "que efectivamente salieron de la fase de grupos. Los mejores terceros se asignan "
-               "por ranking (aproximacion de la tabla oficial FIFA).")
+        st.warning(f"Fase de grupos en curso ({n_completos}/12 grupos cerrados). Los 16avos de "
+                   "los grupos sin cerrar son PROVISIONALES (con lo jugado hasta ahora); se "
+                   "completaran cuando el cron traiga los resultados de hoy.")
+    st.iframe(render_bracket(rondas_reales, grad="#0d6e4f,#08321f"), height=620)
+    st.caption("Arriba: cuadro PROYECTADO por el modelo (ruta probable). Aqui: el bracket REAL. "
+               "Las cajas en blanco son partidos aun no jugados; se rellenan con los ganadores "
+               "reales conforme avanza el torneo (los mejores terceros se asignan por ranking).")
 
 
 # ================= FASE DE GRUPOS =================

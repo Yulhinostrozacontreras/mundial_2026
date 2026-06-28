@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 12
+CACHE_VER = 13
 
 
 @st.cache_resource
@@ -339,6 +339,40 @@ def tarjeta_html(m, jornada):
             f'{x2}'
             f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
+def tarjeta_16avos_html(m):
+    """Tarjeta de un cruce de 16avos con el mismo formato que la fase de grupos:
+    cajas Info.Esta (forma) / Predicho (modelo) / Claude, y prob de avance."""
+    ih, ia = geo.info(m["home"]), geo.info(m["away"])
+    eh, ea = round(m["gol_home"]), round(m["gol_away"])      # prediccion modelo
+    sh, sa = round(m["sug_home"]), round(m["sug_away"])      # info estadistica (forma)
+    ch, ca = m["claude_home"], m["claude_away"]              # juicio Claude
+    tiene_cla = ch is not None
+    nota_cla = (m.get("claude_nota") or "").replace('"', "'")
+    jugado = m.get("ganador") is not None
+    estado = '<span class="st-jug">Jugado</span>' if jugado else '<span class="st-pen">Por jugar</span>'
+
+    def cajas(sug_v, est_v, cla_v):
+        c = (f'<span class="t-sc sug" title="Info estadistica (forma reciente)">{sug_v}</span>'
+             f'<span class="t-sc est" title="Prediccion del modelo (Poisson)">{est_v}</span>')
+        if tiene_cla:
+            c += f'<span class="t-sc cla" title="Score Claude: {nota_cla}">{cla_v}</span>'
+        return f'<span class="t-scores">{c}</span>'
+
+    heads = ('<span class="h-sug">Info.Esta</span><span class="h-est">Predicho</span>'
+             + ('<span class="h-cla">Claude</span>' if tiene_cla else ''))
+    x2 = (f'<div class="card-x2"><span><b>{ih["cod"]}</b> avanza {m["p_home"]:.0%}</span>'
+          f'<span><b>{ia["cod"]}</b> avanza {m["p_away"]:.0%}</span></div>')
+    return (f'<div class="card"><div class="card-h"><span>16avos de final</span>{estado}</div>'
+            f'<div class="sc-head">{heads}</div>'
+            f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
+            f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
+            f'{cajas(sh, eh, ch)}</div>'
+            f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
+            f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
+            f'{cajas(sa, ea, ca)}</div>'
+            f'{x2}</div>')
+
+
 def render_jugadas(m):
     """Panel de mercados de apuesta de un partido (1X2, over/under, etc.)."""
     mk = m["apuestas"]
@@ -503,38 +537,6 @@ def render_bracket(rondas, grad="#a01a45,#5c0d28"):
     return css + f'<div class="scroll"><div class="wrap">{left}{center}{right}</div></div>'
 
 
-def render_16avos(lst):
-    """Tarjetas de 16avos: marcador estimado + barra de prob de avance (Elo)."""
-    def card(m):
-        ih, ia = geo.info(m["home"]), geo.info(m["away"])
-        na = f'{ih["bandera"]} {ih["es"]}' if m["home"] in geo.INFO else m["home"]
-        nb = f'{ia["es"]} {ia["bandera"]}' if m["away"] in geo.INFO else m["away"]
-        ph, pa = round(m["p_home"] * 100), round(m["p_away"] * 100)
-        gh, ga = round(m["gol_home"]), round(m["gol_away"])
-        return (f'<div class="m16"><div class="m16-top">'
-                f'<span class="m16-t">{na}</span>'
-                f'<span class="m16-sc">{gh} - {ga}</span>'
-                f'<span class="m16-t r">{nb}</span></div>'
-                f'<div class="m16-bar"><div class="m16-h" style="width:{ph}%">{ph}%</div>'
-                f'<div class="m16-a" style="width:{pa}%">{pa}%</div></div></div>')
-    cards = "".join(card(m) for m in lst)
-    css = """<style>
-    .m16wrap{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
-    @media(max-width:640px){.m16wrap{grid-template-columns:1fr;}}
-    .m16{background:#fff;border:1px solid #e6e6ec;border-radius:8px;padding:7px 10px;
-         box-shadow:0 1px 2px rgba(0,0,0,.06);}
-    .m16-top{display:flex;align-items:center;justify-content:space-between;font-size:12px;
-             font-weight:600;color:#222;margin-bottom:5px;}
-    .m16-t{flex:1;}.m16-t.r{text-align:right;}
-    .m16-sc{font-weight:800;color:#5c0d28;margin:0 8px;white-space:nowrap;}
-    .m16-bar{display:flex;height:16px;border-radius:4px;overflow:hidden;font-size:9px;font-weight:700;}
-    .m16-h{background:#3b5bdb;color:#fff;display:flex;align-items:center;padding-left:5px;min-width:22px;}
-    .m16-a{background:# adb5bd;color:#fff;display:flex;align-items:center;justify-content:flex-end;
-           padding-right:5px;min-width:22px;}
-    </style>""".replace("# adb5bd", "#adb5bd")
-    return css + f'<div class="m16wrap">{cards}</div>'
-
-
 with tab_brk:
     st.subheader("Cronograma proyectado — ruta mas probable")
     st.caption("Bracket determinista: en cada llave avanza el equipo de mayor fuerza (Elo). "
@@ -563,12 +565,17 @@ with tab_brk:
                "reales conforme avanza el torneo (los mejores terceros se asignan por ranking).")
 
     st.divider()
-    st.subheader("🔢 16avos: marcador estimado y prob. de avance")
+    st.subheader("🔢 16avos: info estadistica, prediccion y Claude")
     m16, _ = get_16avos()
-    st.caption("Marcador estimado (modelo de goles) y probabilidad de que cada equipo AVANCE "
-               "a 8vos (Elo, incluye el desempate por penales). La barra azul es el local del "
-               "cruce; la gris, el rival.")
-    st.iframe(render_16avos(m16), height=480)
+    st.caption("Igual que la fase de grupos: 🟪 Info.Esta (forma de los ultimos 10 oficiales) · "
+               "⬜ Predicho (modelo Elo+Poisson) · 🟧 Claude (juicio de experto; pasa el cursor sobre "
+               "la caja para ver el porque). Abajo, la probabilidad de AVANZAR a 8vos (Elo, incluye "
+               "el desempate por penales).")
+    st.markdown(CRON_CSS, unsafe_allow_html=True)
+    for i in range(0, len(m16), 2):
+        for col, m in zip(st.columns(2), m16[i:i + 2]):
+            with col:
+                st.markdown(tarjeta_16avos_html(m), unsafe_allow_html=True)
 
 
 # ================= FASE DE GRUPOS =================

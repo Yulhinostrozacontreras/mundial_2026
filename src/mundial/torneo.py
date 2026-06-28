@@ -505,21 +505,46 @@ def bracket_real_arbol(ins: dict):
     return [[eq[i] if i is not None else "" for i in r] for r in rondas], n_completos
 
 
+_CLA16_CACHE: dict = {}
+
+
+def _claude_16avos() -> dict:
+    """Score Claude para 16avos, desde data/claude_16avos.csv. {(home,away):(ch,ca,nota)}."""
+    if _CLA16_CACHE:
+        return _CLA16_CACHE
+    p = PROC.parent / "claude_16avos.csv"
+    if p.exists():
+        for h, a, ch, ca, n in pl.read_csv(p).select(
+                "home_team", "away_team", "claude_home", "claude_away", "nota").iter_rows():
+            _CLA16_CACHE[(h, a)] = (int(ch), int(ca), n)
+    return _CLA16_CACHE
+
+
 def partidos_16avos(ins: dict):
-    """Para cada llave real de 16avos: prob de AVANCE de cada equipo (Elo, incluye
-    desempate por penales) y marcador estimado (Poisson, campo neutral).
+    """Para cada llave real de 16avos, con el mismo detalle que la fase de grupos:
+    info estadistica (forma), prediccion del modelo (Poisson) y score Claude, mas
+    la prob de AVANCE (Elo, incluye desempate por penales).
 
     Devuelve (lista, n_completos). Cada item: home, away, p_home, p_away (suman 1),
-    gol_home, gol_away, score_real (marcador si la llave ya se jugo, sino None).
+    gol_home, gol_away (modelo), sug_home, sug_away (forma), claude_home/away/nota,
+    ganador (si la llave ya se jugo, sino None).
     """
+    import datetime as _dt
     llaves, n_completos = bracket_real_r32(ins)
     eq, elo = ins["equipos"], ins["elo"]
     ko = _ko_resultados(ins)
+    cla = _claude_16avos()
+    fref = _dt.date(2026, 6, 30)  # tras los grupos: forma sobre lo ya jugado
     out = []
     for _, a, b in llaves:
         pa = 1.0 / (1.0 + 10.0 ** (-(elo[a] - elo[b]) / 400.0))
+        sh, sa, _, _ = forma.sugerencia(eq[a], eq[b], fref)
+        cl = cla.get((eq[a], eq[b]))
         out.append(dict(
             home=eq[a], away=eq[b], p_home=pa, p_away=1.0 - pa,
             gol_home=_gol_esperado(ins, a, b), gol_away=_gol_esperado(ins, b, a),
+            sug_home=sh, sug_away=sa,
+            claude_home=cl[0] if cl else None, claude_away=cl[1] if cl else None,
+            claude_nota=cl[2] if cl else None,
             ganador=(eq[ko[frozenset({a, b})]] if frozenset({a, b}) in ko else None)))
     return out, n_completos

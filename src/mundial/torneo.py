@@ -503,3 +503,23 @@ def bracket_real_arbol(ins: dict):
         cur = nxt
         rondas.append(cur)
     return [[eq[i] if i is not None else "" for i in r] for r in rondas], n_completos
+
+
+def partidos_16avos(ins: dict):
+    """Para cada llave real de 16avos: prob de AVANCE de cada equipo (Elo, incluye
+    desempate por penales) y marcador estimado (Poisson, campo neutral).
+
+    Devuelve (lista, n_completos). Cada item: home, away, p_home, p_away (suman 1),
+    gol_home, gol_away, score_real (marcador si la llave ya se jugo, sino None).
+    """
+    llaves, n_completos = bracket_real_r32(ins)
+    eq, elo = ins["equipos"], ins["elo"]
+    ko = _ko_resultados(ins)
+    out = []
+    for _, a, b in llaves:
+        pa = 1.0 / (1.0 + 10.0 ** (-(elo[a] - elo[b]) / 400.0))
+        out.append(dict(
+            home=eq[a], away=eq[b], p_home=pa, p_away=1.0 - pa,
+            gol_home=_gol_esperado(ins, a, b), gol_away=_gol_esperado(ins, b, a),
+            ganador=(eq[ko[frozenset({a, b})]] if frozenset({a, b}) in ko else None)))
+    return out, n_completos

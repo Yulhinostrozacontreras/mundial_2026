@@ -34,6 +34,26 @@ def main():
         schema_overrides={"home_score": pl.Int64, "away_score": pl.Int64},
     ).with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
 
+    # Resultados PROVISIONALES: partidos ya jugados que martj42 aun no publica
+    # (lag ~1 dia). Se aplican SOLO a fixtures sin marcador, asi cuando martj42
+    # los traiga su marcador real prevalece y el override deja de tener efecto
+    # (auto-limpiante). Sirve para ver el bracket al dia sin esperar al dataset.
+    prov_path = PROC_DIR.parent / "resultados_provisionales.csv"
+    n_prov = 0
+    if prov_path.exists():
+        prov = (pl.read_csv(prov_path)
+                .select("home_team", "away_team",
+                        pl.col("home_score").alias("hs_ov"),
+                        pl.col("away_score").alias("as_ov")))
+        df = df.join(prov, on=["home_team", "away_team"], how="left")
+        aplicar = pl.col("hs_ov").is_not_null() & pl.col("home_score").is_null()
+        n_prov = int(df.filter(aplicar).height)
+        df = df.with_columns(
+            pl.when(aplicar).then(pl.col("hs_ov")).otherwise(pl.col("home_score")).alias("home_score"),
+            pl.when(aplicar).then(pl.col("as_ov")).otherwise(pl.col("away_score")).alias("away_score"),
+        ).drop("hs_ov", "as_ov")
+        print(f"  resultados provisionales aplicados: {n_prov}")
+
     jugados = df.filter(pl.col("home_score").is_not_null())
     futuros = df.filter(pl.col("home_score").is_null())
 

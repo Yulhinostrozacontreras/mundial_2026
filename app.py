@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 11
+CACHE_VER = 12
 
 
 @st.cache_resource
@@ -83,6 +83,11 @@ def get_bracket(ver: int = CACHE_VER):
 @st.cache_data
 def get_bracket_real(ver: int = CACHE_VER):
     return torneo.bracket_real_arbol(get_insumos(CACHE_VER))
+
+
+@st.cache_data
+def get_16avos(ver: int = CACHE_VER):
+    return torneo.partidos_16avos(get_insumos(CACHE_VER))
 
 
 @st.cache_data
@@ -498,6 +503,38 @@ def render_bracket(rondas, grad="#a01a45,#5c0d28"):
     return css + f'<div class="scroll"><div class="wrap">{left}{center}{right}</div></div>'
 
 
+def render_16avos(lst):
+    """Tarjetas de 16avos: marcador estimado + barra de prob de avance (Elo)."""
+    def card(m):
+        ih, ia = geo.info(m["home"]), geo.info(m["away"])
+        na = f'{ih["bandera"]} {ih["es"]}' if m["home"] in geo.INFO else m["home"]
+        nb = f'{ia["es"]} {ia["bandera"]}' if m["away"] in geo.INFO else m["away"]
+        ph, pa = round(m["p_home"] * 100), round(m["p_away"] * 100)
+        gh, ga = round(m["gol_home"]), round(m["gol_away"])
+        return (f'<div class="m16"><div class="m16-top">'
+                f'<span class="m16-t">{na}</span>'
+                f'<span class="m16-sc">{gh} - {ga}</span>'
+                f'<span class="m16-t r">{nb}</span></div>'
+                f'<div class="m16-bar"><div class="m16-h" style="width:{ph}%">{ph}%</div>'
+                f'<div class="m16-a" style="width:{pa}%">{pa}%</div></div></div>')
+    cards = "".join(card(m) for m in lst)
+    css = """<style>
+    .m16wrap{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+    @media(max-width:640px){.m16wrap{grid-template-columns:1fr;}}
+    .m16{background:#fff;border:1px solid #e6e6ec;border-radius:8px;padding:7px 10px;
+         box-shadow:0 1px 2px rgba(0,0,0,.06);}
+    .m16-top{display:flex;align-items:center;justify-content:space-between;font-size:12px;
+             font-weight:600;color:#222;margin-bottom:5px;}
+    .m16-t{flex:1;}.m16-t.r{text-align:right;}
+    .m16-sc{font-weight:800;color:#5c0d28;margin:0 8px;white-space:nowrap;}
+    .m16-bar{display:flex;height:16px;border-radius:4px;overflow:hidden;font-size:9px;font-weight:700;}
+    .m16-h{background:#3b5bdb;color:#fff;display:flex;align-items:center;padding-left:5px;min-width:22px;}
+    .m16-a{background:# adb5bd;color:#fff;display:flex;align-items:center;justify-content:flex-end;
+           padding-right:5px;min-width:22px;}
+    </style>""".replace("# adb5bd", "#adb5bd")
+    return css + f'<div class="m16wrap">{cards}</div>'
+
+
 with tab_brk:
     st.subheader("Cronograma proyectado — ruta mas probable")
     st.caption("Bracket determinista: en cada llave avanza el equipo de mayor fuerza (Elo). "
@@ -524,6 +561,14 @@ with tab_brk:
     st.caption("Arriba: cuadro PROYECTADO por el modelo (ruta probable). Aqui: el bracket REAL. "
                "Las cajas en blanco son partidos aun no jugados; se rellenan con los ganadores "
                "reales conforme avanza el torneo (los mejores terceros se asignan por ranking).")
+
+    st.divider()
+    st.subheader("🔢 16avos: marcador estimado y prob. de avance")
+    m16, _ = get_16avos()
+    st.caption("Marcador estimado (modelo de goles) y probabilidad de que cada equipo AVANCE "
+               "a 8vos (Elo, incluye el desempate por penales). La barra azul es el local del "
+               "cruce; la gris, el rival.")
+    st.iframe(render_16avos(m16), height=480)
 
 
 # ================= FASE DE GRUPOS =================

@@ -429,16 +429,98 @@ def _standings_reales(ins: dict):
     return tabla, n_completos
 
 
-def bracket_real_r32(ins: dict):
-    """Las 16 llaves REALES de 16avos segun los resultados ya jugados de grupos.
+def _lab_match(i: int) -> str:
+    """Etiqueta de slots del match i del bracket: '1E - Mejor 3o', '2A - 2B', etc."""
+    def lab(s):
+        tipo, key = s
+        return f"1{key}" if tipo == "W" else (f"2{key}" if tipo == "R" else "Mejor 3o")
+    s1, s2 = R32_BRACKET[i]
+    return f"{lab(s1)} - {lab(s2)}"
 
-    Devuelve (llaves, n_completos) con llaves = lista de 16 tuplas
-    (etiqueta_slot, idxA, idxB) en orden de layout del bracket. Los 8 mejores
-    terceros se asignan por ranking (misma aproximacion que bracket_proyectado).
-    Mientras haya grupos sin cerrar, las posiciones de esos grupos son
-    provisionales (con lo jugado hasta el momento).
+
+def _wc_ko(ins: dict):
+    """Partidos de eliminatoria (WC desde 28-jun que NO son de grupos). Lista de
+    (ih, ia, hs, as, fecha); hs/as None si pendiente."""
+    idx = ins["idx"]
+    fixtures = pl.read_parquet(PROC / "fixtures_2026.parquet")
+    grupos_set = set(fixtures.select("home_team", "away_team").rows())
+    partidos = pl.read_parquet(PROC / "partidos.parquet")
+    wc = partidos.filter((pl.col("tournament") == "FIFA World Cup")
+                         & (pl.col("date") >= pl.date(2026, 6, 28)))
+    out = []
+    for d, h, a, hs, as_ in wc.select("date", "home_team", "away_team",
+                                      "home_score", "away_score").rows():
+        if (h, a) not in grupos_set and h in idx and a in idx:
+            out.append((idx[h], idx[a], hs, as_, d))
+    return out
+
+
+def _shootouts(ins: dict) -> dict:
+    """Ganador por PENALES de los KO 2026. {frozenset({i,j}): idx_ganador}."""
+    idx, out = ins["idx"], {}
+    p = PROC / "shootouts.parquet"
+    if p.exists():
+        sh = pl.read_parquet(p).filter(pl.col("date") >= pl.date(2026, 6, 28))
+        for h, a, w in sh.select("home_team", "away_team", "winner").rows():
+            if h in idx and a in idx and w in idx:
+                out[frozenset({idx[h], idx[a]})] = idx[w]
+    return out
+
+
+def _ko_resultados(ins: dict) -> dict:
+    """Resultado de cada KO jugado: {frozenset({i,j}): (idx_ganador, por_penales)}.
+    En empates (90'+prorroga) el ganador sale de la tanda de penales (shootouts)."""
+    sho = _shootouts(ins)
+    ko = {}
+    for ih, ia, hs, as_, _ in _wc_ko(ins):
+        if hs is None:
+            continue
+        key = frozenset({ih, ia})
+        if hs > as_:
+            ko[key] = (ih, False)
+        elif as_ > hs:
+            ko[key] = (ia, False)
+        elif key in sho:
+            ko[key] = (sho[key], True)  # empate -> penales
+    return ko
+
+
+def _fixture_r32_real(ins: dict) -> dict:
+    """Mapea cada match de 16avos (idx 0-15 = R32_BRACKET[i]) a su partido REAL del
+    dataset, identificandolo por el equipo del slot fijo (1X/2X). Devuelve
+    {i: (ih, ia, hs, as, fecha)} o {} si el dataset aun no tiene los 16 partidos."""
+    tabla, _ = _standings_reales(ins)
+    W = {g: tabla[g][0][0] for g in tabla}
+    R = {g: tabla[g][1][0] for g in tabla}
+    # solo 16avos: KO con fecha hasta el 3-jul (octavos arrancan el 4-jul)
+    kos = [m for m in _wc_ko(ins) if m[4] <= __import__("datetime").date(2026, 7, 3)]
+    if len(kos) < 16:
+        return {}
+    res, usados = {}, set()
+    for i, (s1, s2) in enumerate(R32_BRACKET):
+        anchor = next((W[s[1]] if s[0] == "W" else R[s[1]]
+                       for s in (s1, s2) if s[0] in ("W", "R")), None)
+        for k, (ih, ia, hs, as_, d) in enumerate(kos):
+            if k not in usados and anchor in (ih, ia):
+                res[i] = (ih, ia, hs, as_, d)
+                usados.add(k)
+                break
+    return res
+
+
+def bracket_real_r32(ins: dict):
+    """Las 16 llaves REALES de 16avos. Si el dataset ya tiene los enfrentamientos de
+    16avos, usa esos (fixture OFICIAL); si no, los deriva de los resultados de grupos
+    (1ros/2dos exactos + 8 mejores terceros por ranking, aproximacion).
+
+    Devuelve (llaves, n_completos) con llaves = 16 tuplas (etiqueta, idxA, idxB) en
+    orden de layout del bracket.
     """
     tabla, n_completos = _standings_reales(ins)
+    real = _fixture_r32_real(ins)
+    if real:  # fixture oficial disponible
+        return [(_lab_match(i), real[i][0], real[i][1]) for i in _LAYOUT_R32], n_completos
+    # derivacion aproximada (antes de que el dataset publique los 16avos)
     W = {g: tabla[g][0][0] for g in tabla}
     R = {g: tabla[g][1][0] for g in tabla}
     terceros = sorted(((g, tabla[g][2]) for g in tabla),
@@ -449,57 +531,32 @@ def bracket_real_r32(ins: dict):
         tipo, key = s
         return W[key] if tipo == "W" else (R[key] if tipo == "R" else best8[key])
 
-    def lab(s):
-        tipo, key = s
-        return f"1{key}" if tipo == "W" else (f"2{key}" if tipo == "R" else "Mejor 3o")
-
     llaves = []
     for i in _LAYOUT_R32:
         s1, s2 = R32_BRACKET[i]
-        llaves.append((f"{lab(s1)} - {lab(s2)}", slot(s1), slot(s2)))
+        llaves.append((_lab_match(i), slot(s1), slot(s2)))
     return llaves, n_completos
-
-
-def _ko_resultados(ins: dict) -> dict:
-    """Ganadores REALES de los partidos de eliminatoria ya jugados (los WC
-    jugados que NO son de la fase de grupos). {frozenset({i,j}): idx_ganador}.
-    Empates (definidos por penales, sin dato de marcador) quedan sin resolver."""
-    idx = ins["idx"]
-    fixtures = pl.read_parquet(PROC / "fixtures_2026.parquet")
-    grupos_set = set(fixtures.select("home_team", "away_team").rows())
-    partidos = pl.read_parquet(PROC / "partidos.parquet")
-    wc = partidos.filter((pl.col("tournament") == "FIFA World Cup")
-                         & (pl.col("date") >= pl.date(2026, 6, 1))
-                         & pl.col("home_score").is_not_null())
-    ko = {}
-    for h, a, hs, as_ in wc.select("home_team", "away_team", "home_score", "away_score").rows():
-        if (h, a) in grupos_set or h not in idx or a not in idx:
-            continue
-        if hs > as_:
-            ko[frozenset({idx[h], idx[a]})] = idx[h]
-        elif as_ > hs:
-            ko[frozenset({idx[h], idx[a]})] = idx[a]
-    return ko
 
 
 def bracket_real_arbol(ins: dict):
     """El bracket REAL en formato arbol (mismas rondas que bracket_proyectado).
 
     Devuelve ([R32(32), R16(16), QF(8), SF(4), F(2), campeon(1)], n_completos)
-    con NOMBRES; las celdas aun no definidas (eliminatorias sin jugar) van como
-    cadena vacia "". Los 16avos salen de los resultados de grupos; las rondas
-    siguientes se llenan con los ganadores reales conforme se jueguen.
+    con NOMBRES; las celdas aun no definidas van como cadena vacia "". Los 16avos
+    salen del fixture real; las rondas siguientes se llenan con los ganadores
+    reales (incluido el desempate por penales) conforme se juegan.
     """
     llaves, n_completos = bracket_real_r32(ins)
     eq = ins["equipos"]
     ko = _ko_resultados(ins)
-    cur = [t for _, a, b in llaves for t in (a, b)]  # 32 idx en orden de layout
+    cur = [t for _, a, b in llaves for t in (a, b)]
     rondas = [cur]
     while len(cur) > 1:
         nxt = []
         for k in range(0, len(cur), 2):
             x, y = cur[k], cur[k + 1]
-            nxt.append(ko.get(frozenset({x, y})) if (x is not None and y is not None) else None)
+            g = ko.get(frozenset({x, y})) if (x is not None and y is not None) else None
+            nxt.append(g[0] if g else None)
         cur = nxt
         rondas.append(cur)
     return [[eq[i] if i is not None else "" for i in r] for r in rondas], n_completos
@@ -563,21 +620,26 @@ def partidos_16avos(ins: dict):
     eq, elo = ins["equipos"], ins["elo"]
     ko = _ko_resultados(ins)
     cla = _claude_16avos()
+    score = {frozenset({ih, ia}): (hs, as_) for ih, ia, hs, as_, _ in _wc_ko(ins) if hs is not None}
     fref = _dt.date(2026, 6, 30)  # tras los grupos: forma sobre lo ya jugado
     out = []
     for j, (_, a, b) in enumerate(llaves):
         midx = _LAYOUT_R32[j]  # llave j en pantalla = R32_BRACKET[midx] = Match 73+midx
         fecha, hora, off, sede = _FECHAS_R32[midx]
-        pa = 1.0 / (1.0 + 10.0 ** (-(elo[a] - elo[b]) / 400.0))
+        _, pD, _ = _elo_wdl(ins, a, b)  # prob de empate en 90' -> prorroga/penales
+        pa = 1.0 / (1.0 + 10.0 ** (-(elo[a] - elo[b]) / 400.0))  # prob de AVANZAR (con desempate)
         sh, sa, _, _ = forma.sugerencia(eq[a], eq[b], fref)
         cl = cla.get((eq[a], eq[b]))
+        gana = ko.get(frozenset({a, b}))  # (idx_ganador, por_penales) o None
         out.append(dict(
-            home=eq[a], away=eq[b], p_home=pa, p_away=1.0 - pa,
+            home=eq[a], away=eq[b], p_home=pa, p_away=1.0 - pa, p_penales=pD,
             gol_home=_gol_esperado(ins, a, b), gol_away=_gol_esperado(ins, b, a),
             sug_home=sh, sug_away=sa,
             claude_home=cl[0] if cl else None, claude_away=cl[1] if cl else None,
             claude_nota=cl[2] if cl else None, sede=sede,
             fecha_peru=_peru_dt(fecha, hora, off),
-            ganador=(eq[ko[frozenset({a, b})]] if frozenset({a, b}) in ko else None)))
+            score_real=score.get(frozenset({a, b})),
+            ganador=eq[gana[0]] if gana else None,
+            por_penales=gana[1] if gana else False))
     out.sort(key=lambda m: m["fecha_peru"])
     return out, n_completos

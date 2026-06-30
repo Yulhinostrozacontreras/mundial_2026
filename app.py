@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 14
+CACHE_VER = 15
 
 
 @st.cache_resource
@@ -341,27 +341,39 @@ def tarjeta_html(m, jornada):
 
 def tarjeta_16avos_html(m):
     """Tarjeta de un cruce de 16avos con el mismo formato que la fase de grupos:
-    cajas Info.Esta (forma) / Predicho (modelo) / Claude, y prob de avance."""
+    cajas Info.Esta (forma) / Predicho (modelo) / Claude / Real, prob de avance y
+    de penales, y -si ya se jugo- quien clasifica y como (en el tiempo o penales)."""
     ih, ia = geo.info(m["home"]), geo.info(m["away"])
     eh, ea = round(m["gol_home"]), round(m["gol_away"])      # prediccion modelo
     sh, sa = round(m["sug_home"]), round(m["sug_away"])      # info estadistica (forma)
     ch, ca = m["claude_home"], m["claude_away"]              # juicio Claude
     tiene_cla = ch is not None
     nota_cla = (m.get("claude_nota") or "").replace('"', "'")
-    jugado = m.get("ganador") is not None
+    jugado = m.get("score_real") is not None
+    rh, ra = m["score_real"] if jugado else ("", "")
     estado = '<span class="st-jug">Jugado</span>' if jugado else '<span class="st-pen">Por jugar</span>'
 
-    def cajas(sug_v, est_v, cla_v):
+    def cajas(sug_v, est_v, cla_v, real_v):
         c = (f'<span class="t-sc sug" title="Info estadistica (forma reciente)">{sug_v}</span>'
              f'<span class="t-sc est" title="Prediccion del modelo (Poisson)">{est_v}</span>')
         if tiene_cla:
             c += f'<span class="t-sc cla" title="Score Claude: {nota_cla}">{cla_v}</span>'
+        if jugado:
+            c += f'<span class="t-sc real" title="Resultado real (90 min)">{real_v}</span>'
         return f'<span class="t-scores">{c}</span>'
 
     heads = ('<span class="h-sug">Info.Esta</span><span class="h-est">Predicho</span>'
-             + ('<span class="h-cla">Claude</span>' if tiene_cla else ''))
-    x2 = (f'<div class="card-x2"><span><b>{ih["cod"]}</b> avanza {m["p_home"]:.0%}</span>'
-          f'<span><b>{ia["cod"]}</b> avanza {m["p_away"]:.0%}</span></div>')
+             + ('<span class="h-cla">Claude</span>' if tiene_cla else '')
+             + ('<span class="h-real">Real</span>' if jugado else ''))
+    if m.get("ganador"):  # ya jugado: quien clasifica y como
+        ig = geo.info(m["ganador"])
+        modo = "por penales" if m.get("por_penales") else "en el tiempo"
+        x2 = (f'<div class="card-x2"><span>&#9989; <b>Clasifica:</b> {ig["bandera"]} {ig["es"]} '
+              f'<i>({modo})</i></span></div>')
+    else:  # por jugar: prob de avanzar y de definirse en penales/prorroga
+        x2 = (f'<div class="card-x2"><span><b>{ih["cod"]}</b> avanza {m["p_home"]:.0%}</span>'
+              f'<span>&#127922; Penales {m["p_penales"]:.0%}</span>'
+              f'<span><b>{ia["cod"]}</b> avanza {m["p_away"]:.0%}</span></div>')
     d = m["fecha_peru"]
     cuando = f'{DIAS_SEM[d.weekday()]} {d.day} {MESES[d.month]} &middot; {d.strftime("%H:%M")} (Peru)'
     footer = f'<div class="card-f"><span>&#128336; {cuando}</span><span>&#128205; {m["sede"]}</span></div>'
@@ -369,10 +381,10 @@ def tarjeta_16avos_html(m):
             f'<div class="sc-head">{heads}</div>'
             f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
             f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
-            f'{cajas(sh, eh, ch)}</div>'
+            f'{cajas(sh, eh, ch, rh)}</div>'
             f'<div class="t-row"><span class="t-flag">{ia["bandera"]}</span>'
             f'<span class="t-name">{ia["es"]}<span class="t-cod">{ia["cod"]}</span></span>'
-            f'{cajas(sa, ea, ca)}</div>'
+            f'{cajas(sa, ea, ca, ra)}</div>'
             f'{x2}{footer}</div>')
 
 
@@ -570,10 +582,11 @@ with tab_brk:
     st.divider()
     st.subheader("🔢 16avos: info estadistica, prediccion y Claude")
     m16, _ = get_16avos()
-    st.caption("Ordenados por fecha de juego (hora de Peru). Igual que la fase de grupos: "
-               "🟪 Info.Esta (forma de los ultimos 10 oficiales) · ⬜ Predicho (modelo Elo+Poisson) · "
-               "🟧 Claude (juicio de experto; pasa el cursor sobre la caja para ver el porque). Abajo, "
-               "la probabilidad de AVANZAR a 8vos (Elo, incluye el desempate por penales).")
+    st.caption("Fixture OFICIAL, ordenado por fecha (hora de Peru). Cajas como en grupos: "
+               "🟪 Info.Esta (forma) · ⬜ Predicho (modelo) · 🟧 Claude (juicio de experto, ahora con "
+               "criterio mata-mata: marcadores mas cerrados y empates a penales donde hay paridad) · "
+               "🟥 Real (90 min, en los ya jugados). Abajo: prob. de AVANZAR y 🎲 prob. de que se "
+               "defina en penales/prorroga; en los jugados, quien clasifica y como.")
     st.markdown(CRON_CSS, unsafe_allow_html=True)
     for i in range(0, len(m16), 2):
         for col, m in zip(st.columns(2), m16[i:i + 2]):

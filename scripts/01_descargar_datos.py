@@ -10,6 +10,7 @@ import polars as pl
 import requests
 
 URL = "https://raw.githubusercontent.com/martj42/international_results/master/results.csv"
+URL_SHOOTOUTS = "https://raw.githubusercontent.com/martj42/international_results/master/shootouts.csv"
 RAW_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 PROC_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 
@@ -58,6 +59,15 @@ def main():
     futuros = df.filter(pl.col("home_score").is_null())
 
     df.write_parquet(parquet_path)
+
+    # Penales (define quien avanza en los empates de eliminatoria)
+    rs = requests.get(URL_SHOOTOUTS, timeout=60)
+    rs.raise_for_status()
+    (RAW_DIR / "shootouts.csv").write_bytes(rs.content)
+    sh = (pl.read_csv(RAW_DIR / "shootouts.csv")
+          .with_columns(pl.col("date").str.to_date("%Y-%m-%d")))
+    sh.write_parquet(PROC_DIR / "shootouts.parquet")
+    print(f"  shootouts (penales) -> {sh.height:,} registros")
 
     print(f"\nResumen:")
     print(f"  total partidos     : {df.height:,}")

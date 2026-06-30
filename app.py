@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 15
+CACHE_VER = 16
 
 
 @st.cache_resource
@@ -587,6 +587,16 @@ with tab_brk:
                "criterio mata-mata: marcadores mas cerrados y empates a penales donde hay paridad) · "
                "🟥 Real (90 min, en los ya jugados). Abajo: prob. de AVANZAR y 🎲 prob. de que se "
                "defina en penales/prorroga; en los jugados, quien clasifica y como.")
+    st.info(
+        "🤖 **Mi lectura como IA (al 30-jun)** — El torneo ya tumbo a dos gigantes europeos por "
+        "penales: **Paraguay** elimino a Alemania y **Marruecos** a Paises Bajos, ambos con el mismo "
+        "molde (rival ordenado, fisico y sin miedo). Eso pesa en mis picks: marco como parejos los "
+        "cruces donde un favorito enfrenta a ese perfil. Tres avisos que quiza no estas viendo: "
+        "**(1)** en *Mexico-Ecuador* los modelos de xG dan favorito a **Ecuador**, no a Mexico, pese "
+        "a la localia; **(2)** *Belgica-Senegal* es, para mi, **el upset mas probable** de la jornada; "
+        "**(3)** *Portugal-Croacia* y *Suiza-Argelia* huelen a penales. **Argentina** tiene el camino "
+        "mas limpio y **Colombia** es mi tapada del lado fuerte del cuadro. (Pasa el cursor sobre cada "
+        "caja 🟧 Claude para ver el porque de cada pick.)")
     st.markdown(CRON_CSS, unsafe_allow_html=True)
     for i in range(0, len(m16), 2):
         for col, m in zip(st.columns(2), m16[i:i + 2]):

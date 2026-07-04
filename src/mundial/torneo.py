@@ -562,7 +562,30 @@ def bracket_real_arbol(ins: dict):
     return [[eq[i] if i is not None else "" for i in r] for r in rondas], n_completos
 
 
-_CLA16_CACHE: dict = {}
+_CLA_CACHE: dict = {}
+
+
+def _claude_csv(nombre: str) -> dict:
+    """Score Claude (juicio de experto) desde data/<nombre>. {(home,away):(ch,ca,nota)}."""
+    if nombre in _CLA_CACHE:
+        return _CLA_CACHE[nombre]
+    d = {}
+    p = PROC.parent / nombre
+    if p.exists():
+        for h, a, ch, ca, n in pl.read_csv(p).select(
+                "home_team", "away_team", "claude_home", "claude_away", "nota").iter_rows():
+            d[(h, a)] = (int(ch), int(ca), n)
+    _CLA_CACHE[nombre] = d
+    return d
+
+
+def _claude_16avos() -> dict:
+    return _claude_csv("claude_16avos.csv")
+
+
+def _claude_octavos() -> dict:
+    return _claude_csv("claude_octavos.csv")
+
 
 # Calendario OFICIAL de 16avos (Round of 32). El indice i corresponde a
 # R32_BRACKET[i] = Match (73+i). (fecha, hora_local, offset_utc, sede). Fuente:
@@ -594,40 +617,20 @@ def _peru_dt(fecha: str, hora: str, off: int):
     return loc - _dt.timedelta(hours=off) - _dt.timedelta(hours=5)
 
 
-def _claude_16avos() -> dict:
-    """Score Claude para 16avos, desde data/claude_16avos.csv. {(home,away):(ch,ca,nota)}."""
-    if _CLA16_CACHE:
-        return _CLA16_CACHE
-    p = PROC.parent / "claude_16avos.csv"
-    if p.exists():
-        for h, a, ch, ca, n in pl.read_csv(p).select(
-                "home_team", "away_team", "claude_home", "claude_away", "nota").iter_rows():
-            _CLA16_CACHE[(h, a)] = (int(ch), int(ca), n)
-    return _CLA16_CACHE
-
-
-def partidos_16avos(ins: dict):
-    """Para cada llave real de 16avos, con el mismo detalle que la fase de grupos:
-    info estadistica (forma), prediccion del modelo (Poisson) y score Claude, mas
-    la prob de AVANCE (Elo, incluye desempate por penales).
-
-    Devuelve (lista, n_completos). Cada item: home, away, p_home, p_away (suman 1),
-    gol_home, gol_away (modelo), sug_home, sug_away (forma), claude_home/away/nota,
-    ganador (si la llave ya se jugo, sino None).
-    """
+def _enriquecer_ko(ins: dict, items: list, cla: dict) -> list:
+    """Enriquece una lista de cruces de eliminatoria con el mismo detalle que la
+    fase de grupos. items = [(idxA, idxB, fecha_peru, sede), ...]. Devuelve dicts
+    con forma (info estadistica), modelo (prediccion), Claude, prob de avance y de
+    penales, y -si ya se jugo- score real, ganador y si fue por penales."""
     import datetime as _dt
-    llaves, n_completos = bracket_real_r32(ins)
     eq, elo = ins["equipos"], ins["elo"]
     ko = _ko_resultados(ins)
-    cla = _claude_16avos()
     score = {frozenset({ih, ia}): (hs, as_) for ih, ia, hs, as_, _ in _wc_ko(ins) if hs is not None}
-    fref = _dt.date(2026, 6, 30)  # tras los grupos: forma sobre lo ya jugado
+    fref = _dt.date(2026, 6, 30)  # forma sobre lo ya jugado
     out = []
-    for j, (_, a, b) in enumerate(llaves):
-        midx = _LAYOUT_R32[j]  # llave j en pantalla = R32_BRACKET[midx] = Match 73+midx
-        fecha, hora, off, sede = _FECHAS_R32[midx]
+    for a, b, fecha_peru, sede in items:
         _, pD, _ = _elo_wdl(ins, a, b)  # prob de empate en 90' -> prorroga/penales
-        pa = 1.0 / (1.0 + 10.0 ** (-(elo[a] - elo[b]) / 400.0))  # prob de AVANZAR (con desempate)
+        pa = 1.0 / (1.0 + 10.0 ** (-(elo[a] - elo[b]) / 400.0))  # prob de AVANZAR
         sh, sa, _, _ = forma.sugerencia(eq[a], eq[b], fref)
         cl = cla.get((eq[a], eq[b]))
         gana = ko.get(frozenset({a, b}))  # (idx_ganador, por_penales) o None
@@ -636,10 +639,58 @@ def partidos_16avos(ins: dict):
             gol_home=_gol_esperado(ins, a, b), gol_away=_gol_esperado(ins, b, a),
             sug_home=sh, sug_away=sa,
             claude_home=cl[0] if cl else None, claude_away=cl[1] if cl else None,
-            claude_nota=cl[2] if cl else None, sede=sede,
-            fecha_peru=_peru_dt(fecha, hora, off),
+            claude_nota=cl[2] if cl else None, sede=sede, fecha_peru=fecha_peru,
             score_real=score.get(frozenset({a, b})),
             ganador=eq[gana[0]] if gana else None,
             por_penales=gana[1] if gana else False))
     out.sort(key=lambda m: m["fecha_peru"])
-    return out, n_completos
+    return out
+
+
+def partidos_16avos(ins: dict):
+    """16avos con el detalle de la fase de grupos (forma/modelo/Claude/prob).
+    Devuelve (lista, n_completos)."""
+    llaves, n_completos = bracket_real_r32(ins)
+    items = []
+    for j, (_, a, b) in enumerate(llaves):
+        midx = _LAYOUT_R32[j]  # llave j en pantalla = R32_BRACKET[midx] = Match 73+midx
+        fecha, hora, off, sede = _FECHAS_R32[midx]
+        items.append((a, b, _peru_dt(fecha, hora, off), sede))
+    return _enriquecer_ko(ins, items, _claude_16avos()), n_completos
+
+
+# Octavos (Round of 16): hora oficial de inicio en GMT por enfrentamiento. El
+# dataset aporta los equipos, la fecha y la sede; aqui solo la hora de comienzo.
+_HORAS_R16 = {
+    ("Canada", "Morocco"): "2026-07-04 17:00",
+    ("Paraguay", "France"): "2026-07-04 21:00",
+    ("Brazil", "Norway"): "2026-07-05 20:00",
+    ("Mexico", "England"): "2026-07-06 02:00",
+    ("Argentina", "Egypt"): "2026-07-06 16:00",
+    ("Portugal", "Spain"): "2026-07-06 22:00",
+    ("Switzerland", "Colombia"): "2026-07-06 23:00",
+    ("United States", "Belgium"): "2026-07-07 03:00",
+}
+
+
+def partidos_octavos(ins: dict):
+    """Octavos (Round of 16) tomados del dataset (enfrentamientos reales), con el
+    mismo detalle que 16avos. Devuelve la lista (vacia si aun no hay octavos)."""
+    import datetime as _dt
+    idx, eq = ins["idx"], ins["equipos"]
+    fixtures = pl.read_parquet(PROC / "fixtures_2026.parquet")
+    gset = set(fixtures.select("home_team", "away_team").rows())
+    partidos = pl.read_parquet(PROC / "partidos.parquet")
+    wc = partidos.filter((pl.col("tournament") == "FIFA World Cup")
+                         & (pl.col("date") >= pl.date(2026, 7, 4)))
+    items = []
+    for h, a, city, country in wc.select("home_team", "away_team", "city", "country").rows():
+        if (h, a) in gset or h not in idx or a not in idx:
+            continue
+        gmt = _HORAS_R16.get((h, a))
+        if gmt is None:  # aun no es octavos (o falta su hora) -> se ignora
+            continue
+        fp = _dt.datetime.strptime(gmt, "%Y-%m-%d %H:%M") - _dt.timedelta(hours=5)  # GMT->Peru
+        sede = ", ".join(x for x in (city, country) if x) or "-"
+        items.append((idx[h], idx[a], fp, sede))
+    return _enriquecer_ko(ins, items, _claude_octavos())

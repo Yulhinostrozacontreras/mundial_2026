@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 16
+CACHE_VER = 17
 
 
 @st.cache_resource
@@ -88,6 +88,11 @@ def get_bracket_real(ver: int = CACHE_VER):
 @st.cache_data
 def get_16avos(ver: int = CACHE_VER):
     return torneo.partidos_16avos(get_insumos(CACHE_VER))
+
+
+@st.cache_data
+def get_octavos(ver: int = CACHE_VER):
+    return torneo.partidos_octavos(get_insumos(CACHE_VER))
 
 
 @st.cache_data
@@ -339,8 +344,8 @@ def tarjeta_html(m, jornada):
             f'{x2}'
             f'<div class="card-f"><span>&#128336; {cuando} (Peru)</span><span>&#128205; {sede}</span></div></div>')
 
-def tarjeta_16avos_html(m):
-    """Tarjeta de un cruce de 16avos con el mismo formato que la fase de grupos:
+def tarjeta_ko_html(m, titulo="16avos de final"):
+    """Tarjeta de un cruce de eliminatoria con el mismo formato que la fase de grupos:
     cajas Info.Esta (forma) / Predicho (modelo) / Claude / Real, prob de avance y
     de penales, y -si ya se jugo- quien clasifica y como (en el tiempo o penales)."""
     ih, ia = geo.info(m["home"]), geo.info(m["away"])
@@ -377,7 +382,7 @@ def tarjeta_16avos_html(m):
     d = m["fecha_peru"]
     cuando = f'{DIAS_SEM[d.weekday()]} {d.day} {MESES[d.month]} &middot; {d.strftime("%H:%M")} (Peru)'
     footer = f'<div class="card-f"><span>&#128336; {cuando}</span><span>&#128205; {m["sede"]}</span></div>'
-    return (f'<div class="card"><div class="card-h"><span>16avos de final</span>{estado}</div>'
+    return (f'<div class="card"><div class="card-h"><span>{titulo}</span>{estado}</div>'
             f'<div class="sc-head">{heads}</div>'
             f'<div class="t-row"><span class="t-flag">{ih["bandera"]}</span>'
             f'<span class="t-name">{ih["es"]}<span class="t-cod">{ih["cod"]}</span></span>'
@@ -601,7 +606,29 @@ with tab_brk:
     for i in range(0, len(m16), 2):
         for col, m in zip(st.columns(2), m16[i:i + 2]):
             with col:
-                st.markdown(tarjeta_16avos_html(m), unsafe_allow_html=True)
+                st.markdown(tarjeta_ko_html(m, "16avos de final"), unsafe_allow_html=True)
+
+    m8 = get_octavos()
+    if m8:
+        st.divider()
+        st.subheader("🥇 Octavos de final: info estadistica, prediccion y Claude")
+        st.caption("Fixture OFICIAL, ordenado por fecha (hora de Peru). Mismas cajas que 16avos: "
+                   "🟪 Info.Esta · ⬜ Predicho · 🟧 Claude (juicio de experto) · 🟥 Real. Abajo: prob. de "
+                   "AVANZAR y 🎲 prob. de penales/prorroga; en los jugados, quien clasifica y como.")
+        st.info(
+            "🤖 **Mi lectura como IA (al 4-jul)** — Quedan los pesos pesados y ya no hay cruces faciles. "
+            "Cuatro avisos donde me juego algo mas que el modelo: **(1)** *Mexico-Inglaterra* en el "
+            "Azteca: el modelo da a Inglaterra 88%, pero las casas lo ven casi 50-50; la localia mexicana "
+            "esta subestimada y para mi es un 1-1 a penales. **(2)** *Brasil-Noruega* es el cruce con mas "
+            "chance de sorpresa entre los grandes: Brasil diezmado en ataque vs Haaland en racha. "
+            "**(3)** *USA-Belgica*: el modelo pone a Belgica, pero USA de local y en alza no es descartable. "
+            "**(4)** *Portugal-Espana* es el partidazo (derbi iberico): Espana mejor equipo, pero en "
+            "mata-mata es casi moneda al aire. **Argentina** (Opta 81%) y **Francia** son las mas firmes; "
+            "**Colombia** sigue siendo mi tapada. (Pasa el cursor sobre cada caja 🟧 Claude.)")
+        for i in range(0, len(m8), 2):
+            for col, m in zip(st.columns(2), m8[i:i + 2]):
+                with col:
+                    st.markdown(tarjeta_ko_html(m, "Octavos de final"), unsafe_allow_html=True)
 
 
 # ================= FASE DE GRUPOS =================

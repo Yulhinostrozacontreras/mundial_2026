@@ -59,7 +59,7 @@ st.markdown("""
 
 # Subir CACHE_VER fuerza la invalidacion de los cache cuando cambia la estructura
 # de los insumos/simulacion (Streamlit no detecta cambios en funciones externas).
-CACHE_VER = 17
+CACHE_VER = 18
 
 
 @st.cache_resource
@@ -93,6 +93,11 @@ def get_16avos(ver: int = CACHE_VER):
 @st.cache_data
 def get_octavos(ver: int = CACHE_VER):
     return torneo.partidos_octavos(get_insumos(CACHE_VER))
+
+
+@st.cache_data
+def get_cuartos(ver: int = CACHE_VER):
+    return torneo.partidos_cuartos(get_insumos(CACHE_VER))
 
 
 @st.cache_data
@@ -629,6 +634,27 @@ with tab_brk:
             for col, m in zip(st.columns(2), m8[i:i + 2]):
                 with col:
                     st.markdown(tarjeta_ko_html(m, "Octavos de final"), unsafe_allow_html=True)
+
+    m4 = get_cuartos()
+    if m4:
+        st.divider()
+        st.subheader("🏅 Cuartos de final: info estadistica, prediccion y Claude")
+        st.caption("Fixture OFICIAL, ordenado por fecha (hora de Peru). Mismas cajas: 🟪 Info.Esta · "
+                   "⬜ Predicho · 🟧 Claude · 🟥 Real. Abajo: prob. de AVANZAR y 🎲 prob. de penales; en "
+                   "los jugados, quien clasifica y como.")
+        st.info(
+            "🤖 **Mi lectura como IA (al 8-jul)** — Ya estamos en los ocho mejores y todo se estrecha. "
+            "Mi aviso fuerte: **(1)** *Noruega-Inglaterra* es mi **alerta de sorpresa**: Noruega-Haaland "
+            "viene de **eliminar a Brasil** y es la sensacion; Inglaterra es favorita en las casas pero "
+            "fue irregular. Me inclino por la sorpresa o penales. **(2)** *Argentina-Suiza*: cuidado, "
+            "Suiza es el perfil ordenado que ya elimino a Colombia; Argentina pasa pero trabada. "
+            "**(3)** *Francia-Marruecos* es la revancha de 2022: Francia imperial (14-2), pero Marruecos "
+            "nunca es casualidad. **Espana** (invicta en 35) sigue siendo mi favorita al titulo. "
+            "(Pasa el cursor sobre cada caja 🟧 Claude.)")
+        for i in range(0, len(m4), 2):
+            for col, m in zip(st.columns(2), m4[i:i + 2]):
+                with col:
+                    st.markdown(tarjeta_ko_html(m, "Cuartos de final"), unsafe_allow_html=True)
 
 
 # ================= FASE DE GRUPOS =================

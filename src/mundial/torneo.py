@@ -673,11 +673,23 @@ _HORAS_R16 = {
 }
 
 
-def partidos_octavos(ins: dict):
-    """Octavos (Round of 16) tomados del dataset (enfrentamientos reales), con el
-    mismo detalle que 16avos. Devuelve la lista (vacia si aun no hay octavos)."""
+# Cuartos (QF): hora oficial de inicio en GMT por enfrentamiento (equipos, fecha y
+# sede vienen del dataset). France-Morocco 9-jul, Spain-Belgium 10-jul, Norway-
+# England y Argentina-Switzerland 11-jul.
+_HORAS_QF = {
+    ("France", "Morocco"): "2026-07-09 20:00",
+    ("Spain", "Belgium"): "2026-07-10 19:00",
+    ("Norway", "England"): "2026-07-11 21:00",
+    ("Argentina", "Switzerland"): "2026-07-12 01:00",
+}
+
+
+def _partidos_ko_dataset(ins: dict, horas: dict, cla: dict):
+    """Cruces de una ronda KO tomados del dataset (enfrentamientos reales), con el
+    mismo detalle que 16avos. `horas` = {(home,away): 'YYYY-MM-DD HH:MM' GMT} define
+    que partidos entran y a que hora. Vacio si el dataset aun no los tiene."""
     import datetime as _dt
-    idx, eq = ins["idx"], ins["equipos"]
+    idx = ins["idx"]
     fixtures = pl.read_parquet(PROC / "fixtures_2026.parquet")
     gset = set(fixtures.select("home_team", "away_team").rows())
     partidos = pl.read_parquet(PROC / "partidos.parquet")
@@ -685,12 +697,20 @@ def partidos_octavos(ins: dict):
                          & (pl.col("date") >= pl.date(2026, 7, 4)))
     items = []
     for h, a, city, country in wc.select("home_team", "away_team", "city", "country").rows():
-        if (h, a) in gset or h not in idx or a not in idx:
-            continue
-        gmt = _HORAS_R16.get((h, a))
-        if gmt is None:  # aun no es octavos (o falta su hora) -> se ignora
+        gmt = horas.get((h, a))
+        if gmt is None or (h, a) in gset or h not in idx or a not in idx:
             continue
         fp = _dt.datetime.strptime(gmt, "%Y-%m-%d %H:%M") - _dt.timedelta(hours=5)  # GMT->Peru
         sede = ", ".join(x for x in (city, country) if x) or "-"
         items.append((idx[h], idx[a], fp, sede))
-    return _enriquecer_ko(ins, items, _claude_octavos())
+    return _enriquecer_ko(ins, items, cla)
+
+
+def partidos_octavos(ins: dict):
+    """Octavos (Round of 16), enfrentamientos reales del dataset."""
+    return _partidos_ko_dataset(ins, _HORAS_R16, _claude_octavos())
+
+
+def partidos_cuartos(ins: dict):
+    """Cuartos de final, enfrentamientos reales del dataset."""
+    return _partidos_ko_dataset(ins, _HORAS_QF, _claude_csv("claude_cuartos.csv"))

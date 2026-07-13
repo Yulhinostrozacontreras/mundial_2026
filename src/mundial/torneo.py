@@ -714,3 +714,16 @@ def partidos_octavos(ins: dict):
 def partidos_cuartos(ins: dict):
     """Cuartos de final, enfrentamientos reales del dataset."""
     return _partidos_ko_dataset(ins, _HORAS_QF, _claude_csv("claude_cuartos.csv"))
+
+
+# Semifinales (SF): hora oficial en GMT. France-Spain 14-jul (Dallas), England-
+# Argentina 15-jul (Atlanta), ambas 3pm ET = 19:00 GMT.
+_HORAS_SF = {
+    ("France", "Spain"): "2026-07-14 19:00",
+    ("England", "Argentina"): "2026-07-15 19:00",
+}
+
+
+def partidos_semis(ins: dict):
+    """Semifinales, enfrentamientos reales del dataset."""
+    return _partidos_ko_dataset(ins, _HORAS_SF, _claude_csv("claude_semis.csv"))
